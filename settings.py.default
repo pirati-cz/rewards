@@ -1,0 +1,3 @@
+REDMINE_URL = 'https://redmine.pirati.cz'
+REDMINE_KEY = 'fill in the API key generated online'
+REDMINE_VERSION = '3.3.0'
