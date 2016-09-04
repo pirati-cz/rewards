@@ -262,6 +262,7 @@ def create_work_report(project, user_id):
 
     user_report = data_chunk[ data_chunk['Uživatel'] == user_name ].copy()
 
+
     #print(user_name)
     #print(user_filter)
     #if math.isnan(user_filter): print("Není žádný filtr")
@@ -301,7 +302,7 @@ def create_work_report(project, user_id):
             filters = [ vysledek[0] for vysledek in vysl.as_matrix() ]
             filters = ':'.join(filters)
             filters = filters.split(':')
-            print(filters)
+            # print(filters)
             user_report = user_report.loc[~user_report['Projekt'].isin(filters) ].copy()
 
             justification = 'Smlouva se vztahuje na všechny projekty. Výjimkou '
@@ -332,6 +333,7 @@ def create_work_report(project, user_id):
     agreed_fixed_money = payee['Základ']
     agreed_variable_money = payee['Bonus']
     agreed_workload_money = payee['Bonus']/5.0
+    max_task_money = 4.0*payee['Bonus']/5.0
     daily_norm = payee['Doba']
 
 
@@ -361,12 +363,20 @@ def create_work_report(project, user_id):
     links += '\n\n[smlouva]: '+settings.CONTRACTS_PREFIX+payee['Smlouva']+settings.CONTRACTS_SUFFIX
     refund_comment,refund_total_money = refundation_overview(user_role, refunded_hours)
 
+    if second_run:
+        # read the tasks data
+        tasks_money=tasks_data[ tasks_data['Jméno a příjmení'] == user_name ]['Úkolovka'].iloc[0]
+        sanctions_money=tasks_data[ tasks_data['Jméno a příjmení'] == user_name ]['Sankce'].iloc[0]
+    else:
+        tasks_money=0
+        sanctions_money=0
+
     # VARIABLES ASSIGNATION FOR TEMPLATE
     placeholder = {}
     placeholder['TMPNAME']=user_name
     placeholder['TMPTEAM']=payee['Tým']
     placeholder['TMPFUNCTION']=user_role
-    placeholder['TMPCONTRACT']='[smlouva ze dne {0}'.format(str(payee['Začátek']))+'][smlouva]'
+    placeholder['TMPCONTRACT']='[smlouva ze dne {0}'.format(payee['Začátek'].strftime("%-d. %-m. %Y"))+'][smlouva]'
     placeholder['TMPTIMERANGE']=month
     placeholder['TMPTASKS']=table+'\n\n'+justification
     placeholder['TMPPARTYHOURS']=actual_party_hours
@@ -376,22 +386,24 @@ def create_work_report(project, user_id):
     placeholder['TMPPERCENTAGE']=percentage
     placeholder['TMPMONEYRANGE']=str(agreed_fixed_money)+'–'+str(agreed_fixed_money+agreed_variable_money)+' Kč'
     placeholder['TMPCONSTMONEY']=actual_fixed_money
-    placeholder['TMPTASKSMONEY']=0
+    placeholder['TMPTASKSMONEY']=tasks_money
     placeholder['TMPWORKLOADMONEY']=actual_workload_money
     placeholder['TMPVARMONEY']=placeholder['TMPTASKSMONEY']+placeholder['TMPWORKLOADMONEY']
     placeholder['TMPOVERTIMEMONEY']=overtime_money
-    placeholder['TMPSANCTIONS']=0
+    placeholder['TMPSANCTIONS']=sanctions_money
     placeholder['TMPPARTYMONEY']=placeholder['TMPCONSTMONEY']+placeholder['TMPVARMONEY']+placeholder['TMPOVERTIMEMONEY']-placeholder['TMPSANCTIONS']
     placeholder['TMPMONEYCOMMENT']=moneycomment
     placeholder['TMPREFUNDS']=refund_comment
     placeholder['TMPLINKS']=links
 
-
-    user_path = project_path+trans(user_name.replace(' ','-'))+'/'
+    trans_user=trans(user_name.replace(' ','-').lower())
+    user_path = project_path+trans_user+'/'
     os.makedirs(user_path, exist_ok=True)
     target_file=user_path+'README.md'
+    user_report.to_csv(user_path+'user_report.csv', sep=',', encoding='utf-8')
 
-    fp = open('template.md')
+
+    fp = open('user_template.md')
     template = fp.read()
     template = template.format(**placeholder)
 
@@ -399,7 +411,7 @@ def create_work_report(project, user_id):
     f.write(template)
     f.close()
     #os.remove(filename)
-    return (user_name, refund_total_money)
+    return (user_name, trans_user, refund_total_money, max_task_money, placeholder['TMPPARTYMONEY'])
 
 def check_payroll():
     '''The integrity checks for the payroll. Please refer to create_work_report documentation.'''
@@ -524,20 +536,61 @@ for project in used_projects:
     project_users = payroll[ payroll['Tým'] == project ].copy()
     user_ids = project_users['Id'].astype(str).tolist()
 
-    print (user_ids)
+    task_reward_file=project_path+'task_rewards.csv'
+
+    second_run = os.path.isfile(task_reward_file)
+    if second_run:
+        # read the tasks data
+        tasks_data = pd.read_csv(task_reward_file, sep=',', encoding='utf-8', header=0, index_col=0)
+        print(tasks_data)
+    # print (user_ids)
 
     # we shall create report for one user from now on
 
-    project_summary = pd.DataFrame(columns=['Jméno a příjmení', 'Refundace'])
+    project_summary = pd.DataFrame(columns=['Jméno a příjmení', 'Identifikátor', 'Refundace', 'Max za úkoly', 'Odměna clk.'])
 
     links = '\n\n'
 
     for user_id in user_ids:
-        print('printing for user '+user_id)
-        user_name, refund_total_money = create_work_report(project, user_id)
-        project_summary = project_summary.append({'Jméno a příjmení': user_name, 'Refundace': refund_total_money}, ignore_index=True)
+        # print('printing for user '+user_id)
+        user_name, trans_user, refund_total_money, max_task_money, party_money = create_work_report(project, user_id)
+        project_summary = project_summary.append({'Jméno a příjmení': user_name, 'Identifikátor': trans_user,
+            'Refundace': refund_total_money, 'Max za úkoly': max_task_money, 'Odměna clk.': party_money}, ignore_index=True)
         #break
-    print(project_summary)
+    project_summary = project_summary.round(0)
+
+    # 1. print to console
+    print(project_summary[[ 'Jméno a příjmení', 'Refundace', 'Odměna clk.' ]])
+
+    # 2. save to file if not exist
+
+    if not second_run:
+        project_summary['Úkolovka'] = 0.0
+        project_summary['Sankce'] = 0.0
+        project_summary.to_csv(task_reward_file, sep=',', encoding='utf-8', columns=['Jméno a příjmení', 'Refundace', 'Max za úkoly', 'Úkolovka', 'Sankce' ])
+
+    # 3. create a project report
+
+    project_summary['Link'] = '['+project_summary['Jméno a příjmení']+']('+project_summary['Identifikátor']+'/)'
+    project_summary = project_summary[[ 'Link', 'Odměna clk.' ]]
+    team_table = tabulate(project_summary.as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'], tablefmt="pipe", floatfmt=".1f")
+
+    placeholder = {}
+    placeholder['TMPTEAM']=project
+    placeholder['TMPTIMERANGE']=month
+    placeholder['TMPTEAMTABLE']=team_table
+
+    target_file=project_path+'README.md'
+
+    fp = open('team_template.md')
+    template = fp.read()
+    template = template.format(**placeholder)
+
+    f = open(target_file,'w+')
+    f.write(template)
+    f.close()
+
+
     #break
 
 

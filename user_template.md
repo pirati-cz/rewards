@@ -1,8 +1,8 @@
 Česká pirátská strana  
 {TMPTEAM}
 
-Výkaz odměňování
-================
+Osobní výkaz odměňování
+=======================
 
 V tomtu výkazu zveřejňujeme základní informace o vykonané práci a odměňování
 podle určité smlouvy. Výkaz je sestaven podle [metodiky odměňování][metodika],
