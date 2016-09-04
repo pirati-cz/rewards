@@ -4,8 +4,11 @@
 Výkaz odměňování
 ================
 
-V tomtu výkazu zveřejňujeme základní informace o vykonané práci a odměňování podle určité smlouvy. Výkaz je sestaven podle [metodiky odměňování][metodika],
-která obsahuje podrobnosti. U všech údajů jsou uvedeny odkazy do projektového systému [redmine](https://redmine.pirati.cz). Upozorňujeme, že za podmínek stanovených v metodice mohou být některé úkoly v projektovém systému neveřejné.
+V tomtu výkazu zveřejňujeme základní informace o vykonané práci a odměňování
+podle určité smlouvy. Výkaz je sestaven podle [metodiky odměňování][metodika],
+která obsahuje podrobnosti. U všech údajů jsou uvedeny odkazy do projektového
+systému [redmine](https://redmine.pirati.cz). Upozorňujeme, že za podmínek
+stanovených v metodice mohou být některé úkoly v projektovém systému neveřejné.
 
 Odměňovaný
 ----------
@@ -37,11 +40,11 @@ přihlášení zobrazí v projektovém systému.
 
 Rozsah činnosti                        | Počet hodin
 --------------                         | ----------:
-A. Práce hrazená dle smlouvy           | {TMPPARTYHOURS}
-B. Práce hrazená jinými subjekty       | {TMPCITYHOURS}
-**Celkový počet hodin**                | {TMPTOTALHOURS}
-Dohodnutý rozsah práce                 | {TMPNORM}
-**Procento vytížení**                  | {TMPPERCENTAGE}
+A. Práce hrazená dle smlouvy           | {TMPPARTYHOURS:6.2f}
+B. Práce hrazená jinými subjekty       | {TMPCITYHOURS:6.2f}
+**Celkový počet hodin**                | {TMPTOTALHOURS:6.2f}
+Dohodnutý rozsah práce                 | {TMPNORM:6.2f}
+**Procento vytížení**                  | {TMPPERCENTAGE:4.0f} %
 
 Odměna
 ------
@@ -51,16 +54,16 @@ příjem zdanil a zaplatil zákonné pojištění, pokud je nehradí plátce.
 
 ### Odměna dle smlouvy
 
-Složka příjmu                 | Přiznaná částka (Kč)  
------------------             | --------------------:  
-A.1 Pevná složka              | {TMPCONSTMONEY}        
-A.2 Variabilní složka         | {TMPVARMONEY}          
+Složka příjmu                 | Přiznaná částka (Kč)
+-----------------             | --------------------:
+A.1 Pevná složka              | {TMPCONSTMONEY:8.2f}
+A.2 Variabilní složka         | {TMPVARMONEY:8.2f}
 *z toho*                      |
-A.2.1 Odměna za rozsah práce  | {TMPWORKLOADMONEY}     
-A.2.2 Odměna za splněné úkoly | {TMPTASKSMONEY}        
-A.3 Odměna za přesčas         | {TMPOVERTIMEMONEY}     
-A.4 Odpočet za výhrady        | {TMPSANCTIONS}         
-**Celková odměna**            | {TMPPARTYMONEY}       
+A.2.1 Odměna za rozsah práce  | {TMPWORKLOADMONEY:8.2f}
+A.2.2 Odměna za splněné úkoly | {TMPTASKSMONEY:8.2f}
+A.3 Odměna za přesčas         | {TMPOVERTIMEMONEY:8.2f}
+A.4 Odpočet za výhrady        | {TMPSANCTIONS:8.2f}
+**Celková odměna**            | {TMPPARTYMONEY:8.2f}
 
 {TMPMONEYCOMMENT}
 
@@ -68,7 +71,6 @@ A.4 Odpočet za výhrady        | {TMPSANCTIONS}
 
 {TMPREFUNDS}
 
-Částky vyplácené jinými subjekty jsou uvedeny v přibližné výši.  
 
 Prohlášení o zdrojových datech
 ------------------------------

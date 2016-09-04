@@ -103,7 +103,7 @@ def create_link(startDate,endDate,user_ids,query='time_entries.csv'):
 
     link += '&utf8=%E2%9C%93'
 
-    link += '&v[spent_on][]='+startDate+'&v[spent_on][]='+endDate
+    link += '&v[spent_on][]='+str(startDate)+'&v[spent_on][]='+str(endDate)
     link += '&v[user_id][]=' + '&v[user_id][]='.join(user_ids)
 
     return link
@@ -326,19 +326,20 @@ def create_work_report(project, user_id):
     #   daily_norm, agreed_fixed_money, agreed_workload_money, agreed_task_money)
 
     refunded_hours = user_report.loc[ user_report['Refundace'].notnull(), 'Hodiny' ].sum()
-
-
     actual_party_hours = user_report.loc[ ~user_report['Refundace'].notnull(), 'Hodiny' ].sum()
+    actual_total_hours = refunded_hours+actual_party_hours
 
     agreed_fixed_money = payee['Základ']
     agreed_variable_money = payee['Bonus']
-    agreed_workload_money = payee['Bonus']/5
-    actual_business_days = business_days(month+'-01',month+'-'+last_day(month))
+    agreed_workload_money = payee['Bonus']/5.0
+    daily_norm = payee['Doba']
+
+
     agreed_monthly_norm = daily_norm * actual_business_days
     percentage = actual_total_hours/agreed_monthly_norm * 100.0
     hourly_reward = agreed_fixed_money/agreed_monthly_norm
     moneycomment = 'Podle smlouvy činila pevná složka dohodnuté odměny {0} Kč. '.format(agreed_fixed_money) + \
-    'Protože v měsíci {0} bylo {1} dnů, činila hodinová sazba částku {2}. '.format(month, actual_business_days, hourly_reward)
+    'Protože v měsíci {0} bylo {1} dnů, činila hodinová sazba částku {2:.2f}. '.format(month, actual_business_days, hourly_reward)
 
     if actual_party_hours >= agreed_monthly_norm:
         actual_fixed_money = agreed_fixed_money
@@ -346,44 +347,59 @@ def create_work_report(project, user_id):
         overtime_money = hourly_reward*overtime_hours
         moneycomment += 'Došlo k překročení dohodnutého počtu hodin. ' + \
         'Vyplácí se tedy pevná složka odměny ve výši {0} Kč '.format(agreed_fixed_money)
-        'a dále za {0} hodin přesčas náleží odměna {1} Kč. '.format(overtime_hours, overtime_money)
+        'a dále za {0:.2f} hodin přesčas náleží odměna {1:.2f} Kč. '.format(overtime_hours, overtime_money)
     else:
         actual_fixed_money = hourly_reward*actual_party_hours
         overtime_money = 0.0
         moneycomment += 'Nedošlo k překročení dohodnutého počtu hodin. ' + \
-        'Za {0} hodin náleží pevná složka odměny ve výši {1} Kč. '.format(actual_party_hours, actual_fixed_money)
+        'Za {0:.2f} hodin náleží pevná složka odměny ve výši {1:.2f} Kč. '.format(actual_party_hours, actual_fixed_money)
 
     if percentage>=100.0:
         actual_workload_money=agreed_workload_money
     else:
-        actual_workload_money=percentage**2/10.0 * agreed_workload_money
-
-    user_path = project_path
-    os.makedirs(project_path, exist_ok=True)
+        actual_workload_money=(percentage/100.0)**2 * agreed_workload_money
+    links += '\n\n[smlouva]: '+settings.CONTRACTS_PREFIX+payee['Smlouva']+settings.CONTRACTS_SUFFIX
+    refund_comment,refund_total_money = refundation_overview(user_role, refunded_hours)
 
     # VARIABLES ASSIGNATION FOR TEMPLATE
-    TMPTEAM=payee['Tým']
-    TMPFUNCTION=user_role
-    TMPCONTRACT=settings.CONTRACTS_PREFIX+payee['Smlouva']+settings.CONTRACTS_SUFFIX
-    TMPTIMERANGE=month
-    TMPTASKS=table+'\n\n'+justification
-    TMPPARTYHOURS=actual_party_hours
-    TMPCITYHOURS=refunded_hours
-    TMPTOTALHOURS=actual_party_hours+refunded_hours
-    TMPNORM=agreed_monthly_norm
-    TMPPERCENTAGE=percentage
-    TMPMONEYRANGE=str(agreed_fixed_money)+'–'+str(agreed_fixed_money+agreed_variable_money)+' Kč'
-    TMPCONSTMONEY=actual_fixed_money
-    TMPTASKSMONEY=0
-    TMPWORKLOADMONEY=actual_workload_money
-    TMPVARMONEY=TMPTASKSMONEY+TMPWORKLOADMONEY
-    TMPOVERTIMEMONEY=overtime_money
-    TMPSANCTIONS=0
-    TMPPARTYMONEY=TMPCONSTMONEY+TMPVARMONEY+TMPOVERTIMEMONEY-TMPSANCTIONS
-    TMPMONEYCOMMENT=moneycomment
-    TMPREFUNDS=refundation_overview(user_role, refunded_hours)
+    placeholder = {}
+    placeholder['TMPNAME']=user_name
+    placeholder['TMPTEAM']=payee['Tým']
+    placeholder['TMPFUNCTION']=user_role
+    placeholder['TMPCONTRACT']='[smlouva ze dne {0}'.format(str(payee['Začátek']))+'][smlouva]'
+    placeholder['TMPTIMERANGE']=month
+    placeholder['TMPTASKS']=table+'\n\n'+justification
+    placeholder['TMPPARTYHOURS']=actual_party_hours
+    placeholder['TMPCITYHOURS']=refunded_hours
+    placeholder['TMPTOTALHOURS']=actual_total_hours
+    placeholder['TMPNORM']=agreed_monthly_norm
+    placeholder['TMPPERCENTAGE']=percentage
+    placeholder['TMPMONEYRANGE']=str(agreed_fixed_money)+'–'+str(agreed_fixed_money+agreed_variable_money)+' Kč'
+    placeholder['TMPCONSTMONEY']=actual_fixed_money
+    placeholder['TMPTASKSMONEY']=0
+    placeholder['TMPWORKLOADMONEY']=actual_workload_money
+    placeholder['TMPVARMONEY']=placeholder['TMPTASKSMONEY']+placeholder['TMPWORKLOADMONEY']
+    placeholder['TMPOVERTIMEMONEY']=overtime_money
+    placeholder['TMPSANCTIONS']=0
+    placeholder['TMPPARTYMONEY']=placeholder['TMPCONSTMONEY']+placeholder['TMPVARMONEY']+placeholder['TMPOVERTIMEMONEY']-placeholder['TMPSANCTIONS']
+    placeholder['TMPMONEYCOMMENT']=moneycomment
+    placeholder['TMPREFUNDS']=refund_comment
+    placeholder['TMPLINKS']=links
 
 
+    user_path = project_path+trans(user_name.replace(' ','-'))+'/'
+    os.makedirs(user_path, exist_ok=True)
+    target_file=user_path+'README.md'
+
+    fp = open('template.md')
+    template = fp.read()
+    template = template.format(**placeholder)
+
+    f = open(target_file,'w+')
+    f.write(template)
+    f.close()
+    #os.remove(filename)
+    return (user_name, refund_total_money)
 
 def check_payroll():
     '''The integrity checks for the payroll. Please refer to create_work_report documentation.'''
@@ -392,8 +408,8 @@ def check_payroll():
 
 def date_range(row):
     '''Return boolean value whether the given row is has time intersect with dates'''
-    alfa=datetime.strptime(startDate, '%Y-%m-%d').date()
-    omega=datetime.strptime(endDate, '%Y-%m-%d').date()
+    alfa=startDate
+    omega=endDate
 
     alfa=max(row['Začátek'].date(), alfa)
 
@@ -418,7 +434,7 @@ def refundation_overview(role, hours):
     in the given month, so that we can adjust the party salary.'''
 
     this_other_incomes = other_incomes[ other_incomes['Funkce'] == role ].copy()
-    justification = '### Přehled refundací \n\n'
+    justification = ''
 
     if len(this_other_incomes) != 0:
 
@@ -436,12 +452,15 @@ def refundation_overview(role, hours):
 
         this_other_incomes['Sazba'] = this_other_incomes['Výše příjmu'].map(str)+' Kč '+this_other_incomes['Výpočet'].map(str)
         this_other_incomes = this_other_incomes[['Typ příjmu', 'Sazba', 'Měsíční částka' ]]
+        total = this_other_incomes['Měsíční částka'].sum()
         this_other_incomes=this_other_incomes.rename(columns = {'Měsíční částka':'Měsíční částka (Kč)'})
-
         justification += tabulate(this_other_incomes.as_matrix(), headers=['Typ příjmu', 'Sazba', 'Měsíční částka (Kč)'], tablefmt="pipe", floatfmt=".1f")
+
+        justification += '\n\nČástky vyplácené jinými subjekty jsou uvedeny v přibližné výši.'
     else:
         justification += 'U této osoby nejsou evidovány žádné příjmy, na které by měla nárok v souvislosti s funkcí.'
-    return justification
+        total = 0
+    return (justification,total)
 
 #########################################################################
 
@@ -468,8 +487,12 @@ if not month: # if month is not a valid time, use last month
     lastMonth = first - timedelta(days=1)
     month = str(lastMonth.strftime("%Y-%m"))
 
-startDate=month+'-01'
-endDate=str(last_day(month))
+# dates are always gonna be date types
+# month is goint to be simple string such as '2016-02'
+
+startDate=datetime.strptime(month+'-01', '%Y-%m-%d').date()
+endDate=last_day(month)
+actual_business_days = business_days(startDate,endDate)
 
 os.makedirs('.cache', exist_ok=True)
 
@@ -493,7 +516,7 @@ data_chunk = get_data_chunk(startDate,endDate,user_ids)
 
 for project in used_projects:
     identifier = projects_register.loc[str(find_project_by_name(project)),'identifier']
-    project_path = identifier+'/'+year+'/'+monthalone+'/'
+    project_path = 'output/'+identifier+'/'+year+'/'+monthalone+'/'
     os.makedirs(project_path, exist_ok=True)
 
     # one person can have only one role in a given project
@@ -505,11 +528,18 @@ for project in used_projects:
 
     # we shall create report for one user from now on
 
+    project_summary = pd.DataFrame(columns=['Jméno a příjmení', 'Refundace'])
+
+    links = '\n\n'
+
     for user_id in user_ids:
         print('printing for user '+user_id)
-        report = create_work_report(project, user_id)
+        user_name, refund_total_money = create_work_report(project, user_id)
+        project_summary = project_summary.append({'Jméno a příjmení': user_name, 'Refundace': refund_total_money}, ignore_index=True)
         #break
+    print(project_summary)
     #break
+
 
 end = time.time()
 print('Time elapsed: {0:.3f} seconds. '.format(end - start))
