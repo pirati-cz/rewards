@@ -1,3 +1,7 @@
 REDMINE_URL = 'https://redmine.pirati.cz'
 REDMINE_KEY = 'fill in the API key generated online'
 REDMINE_VERSION = '3.3.0'
+GITHUB_PAYROLL='https://raw.githubusercontent.com/pirati-byro/transparence/master/payroll.csv.default'
+GITHUB_OTHERINCOMES='https://raw.githubusercontent.com/pirati-byro/transparence/master/other_incomes.csv'
+CONTRACTS_PREFIX='https://smlouvy.pirati.cz/smlouvy/'
+CONTRACTS_SUFFIX='/'

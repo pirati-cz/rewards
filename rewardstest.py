@@ -7,20 +7,24 @@ import rewards
 import unittest
 import pandas as pd
 from datetime import date
+from urllib import request
+import settings
+import os.path
+
 
 class KnownValues(unittest.TestCase):
 
     known_values = (
-        (17,  'jméno a příjmení',  'Mikuláš Ferjenčík'),
-        (7,   'denní počet hodin', 4) ,
-        (164, 'právní postavení',  'dodavatel strany')
+        (2,  'Jméno a příjmení',  'Mikuláš Ferjenčík'),
+        (4,   'Doba', 4) ,
+        (7, 'Funkce',  'psavkyně mediálního odboru')
       )
 
     def test_known_payrol(self):
         '''reading the payroll should give the expected values'''
 
 
-        known_payroll = rewards.read_payroll('tests/test_payroll.csv')
+        known_payroll = rewards.read_payroll()
 
         for row, col, val in self.known_values:
             read_value = known_payroll[col][row]
@@ -62,7 +66,7 @@ class KnownValues(unittest.TestCase):
     def test_download_link(self):
         '''Test the download link for '''
 
-        tested_link = rewards.create_link(self.startDate,self.endDate,self.user_ids,'csv')
+        tested_link = rewards.create_link(self.startDate,self.endDate,self.user_ids)
         self.assertEqual(tested_link, self.reference_link)
 
     reference_project_pairs = (
@@ -74,7 +78,14 @@ class KnownValues(unittest.TestCase):
         '''Test the project number lookup'''
 
         for number, name in self.reference_project_pairs:
-            self.assertEqual(str(number), str(rewards.find_project_number(name)))
+            self.assertEqual(str(number), str(rewards.find_project_by_name(name)))
+
+    def test_file_download(self):
+        '''Test whether the utility downloads everyting all right. I had problems
+        downloading issues list in correct format.'''
+
+        rewards.safe_download('https://redmine.pirati.cz/projects.json','test_projects.json')
+        self.assertEqual(os.path.isfile('test_projects.json'), True)
 
 if __name__ == '__main__':
     unittest.main()
