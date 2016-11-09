@@ -178,8 +178,7 @@ def build_projects_register():
         with open('.cache/filtered_projects.json', 'w+') as f:
             json.dump(easylist, f)
         os.remove(target_file)
-    else:
-        easylist = json.loads(open('.cache/filtered_projects.json').read())
+    easylist = json.loads(open('.cache/filtered_projects.json').read())
     df = pd.DataFrame
     df = df.from_dict(easylist, orient='index')
     return df
@@ -239,6 +238,9 @@ def pretty_tasks(this_user_id,user_projects, user_issues):
             these_issues['Úkol'] = these_issues.apply(issue_label, axis=1)
             new_table = pd.concat([new_table, these_issues])
 
+    links += '\n\n[tasklist]: '+create_link(startDate,endDate,[this_user_id],query='time_entries')
+    # TODO: filter by projects - filters may apply...
+
     # grafical prep
     new_table = new_table.append({
         'Úkol': '**Celkem v uvedených projektech**',
@@ -246,7 +248,7 @@ def pretty_tasks(this_user_id,user_projects, user_issues):
         }, ignore_index=True)
 
 
-    output = tabulate(new_table.as_matrix(), headers=['Projekt/úkol', 'Počet hodin'], tablefmt="pipe", floatfmt=".1f")
+    output = tabulate(new_table.as_matrix(), headers=['Projekt/úkol', 'Počet hodin'], tablefmt="pipe", floatfmt=".2f")
 
     return (output, links)
 
@@ -341,7 +343,7 @@ def create_work_report(project, user_id):
     percentage = actual_total_hours/agreed_monthly_norm * 100.0
     hourly_reward = agreed_fixed_money/agreed_monthly_norm
     moneycomment = 'Podle smlouvy činila pevná složka dohodnuté odměny {0} Kč. '.format(agreed_fixed_money) + \
-    'Protože v měsíci {0} bylo {1} dnů, činila hodinová sazba částku {2:.2f}. '.format(month, actual_business_days, hourly_reward)
+    'Protože v měsíci {0} bylo {1} dnů, činila hodinová sazba částku {2:.2f} Kč. '.format(month, actual_business_days, hourly_reward)
 
     if actual_party_hours >= agreed_monthly_norm:
         actual_fixed_money = agreed_fixed_money
@@ -478,8 +480,8 @@ def refundation_overview(role, hours):
 
 #             CONFIGURATION - SHOULD BE FROM COMMAND LINE
 
-month=''
-teams='praha medialni-odbor'
+month='2016-09'
+teams='praha senat'
 
 #########################################################################
 #                       PROGRAM INTERNALS
@@ -542,7 +544,7 @@ for project in used_projects:
     if second_run:
         # read the tasks data
         tasks_data = pd.read_csv(task_reward_file, sep=',', encoding='utf-8', header=0, index_col=0)
-        print(tasks_data)
+        #print(tasks_data)
     # print (user_ids)
 
     # we shall create report for one user from now on
@@ -573,7 +575,7 @@ for project in used_projects:
 
     project_summary['Link'] = '['+project_summary['Jméno a příjmení']+']('+project_summary['Identifikátor']+'/)'
     project_summary = project_summary[[ 'Link', 'Odměna clk.' ]]
-    team_table = tabulate(project_summary.as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'], tablefmt="pipe", floatfmt=".1f")
+    team_table = tabulate(project_summary.as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'], tablefmt="pipe", floatfmt=".2f")
 
     placeholder = {}
     placeholder['TMPTEAM']=project

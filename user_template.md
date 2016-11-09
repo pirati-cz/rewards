@@ -77,8 +77,8 @@ Prohlášení o zdrojových datech
 
 Tento výkaz byl vygenerován na základě následujících dat, které jsou jeho součástí:
 
-* [Přehled plněných úkolů v daném období](vykaz.csv)
-* [Stanovení úkolových odměn v týmu](ukoly.csv)
+* [Přehled plněných úkolů v daném období](user_report.csv)
+* [Stanovení úkolových odměn v týmu](../task_rewards.csv)
 
 [metodika]: https://redmine.pirati.cz/projects/praha/wiki/Odm%C4%9B%C5%88ov%C3%A1n%C3%AD_zastupitel%C5%AF
 {TMPLINKS}
