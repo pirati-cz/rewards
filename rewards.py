@@ -16,7 +16,7 @@ import czech_holidays
 from urllib import request
 import settings
 import os.path
-from redmine import Redmine
+# from redmine import Redmine
 from tabulate import tabulate
 import wget
 import json
@@ -326,7 +326,7 @@ def create_work_report(project, user_id):
 
     # now we will calculate the required input data for money!  $$$
     # actual_party_salary(month, actual_party_hours, actual_total_hours,
-    #   daily_norm, agreed_fixed_money, agreed_workload_money, agreed_task_money)
+    #   daily_norm, agreed_fixed_money, agreed_task_money)
 
     refunded_hours = user_report.loc[ user_report['Refundace'].notnull(), 'Hodiny' ].sum()
     actual_party_hours = user_report.loc[ ~user_report['Refundace'].notnull(), 'Hodiny' ].sum()
@@ -334,8 +334,7 @@ def create_work_report(project, user_id):
 
     agreed_fixed_money = payee['Základ']
     agreed_variable_money = payee['Bonus']
-    agreed_workload_money = payee['Bonus']/5.0
-    max_task_money = 4.0*payee['Bonus']/5.0
+    max_task_money = agreed_variable_money
     daily_norm = payee['Doba']
 
 
@@ -358,10 +357,6 @@ def create_work_report(project, user_id):
         moneycomment += 'Nedošlo k překročení dohodnutého počtu hodin. ' + \
         'Za {0:.2f} hodin náleží pevná složka odměny ve výši {1:.2f} Kč. '.format(actual_party_hours, actual_fixed_money)
 
-    if percentage>=100.0:
-        actual_workload_money=agreed_workload_money
-    else:
-        actual_workload_money=(percentage/100.0)**2 * agreed_workload_money
     links += '\n\n[smlouva]: '+settings.CONTRACTS_PREFIX+payee['Smlouva']+settings.CONTRACTS_SUFFIX
     refund_comment,refund_total_money = refundation_overview(user_role, refunded_hours)
 
@@ -389,7 +384,6 @@ def create_work_report(project, user_id):
     placeholder['TMPMONEYRANGE']=str(agreed_fixed_money)+'–'+str(agreed_fixed_money+agreed_variable_money)+' Kč'
     placeholder['TMPCONSTMONEY']=actual_fixed_money
     placeholder['TMPTASKSMONEY']=tasks_money
-    placeholder['TMPWORKLOADMONEY']=actual_workload_money
     placeholder['TMPVARMONEY']=placeholder['TMPTASKSMONEY']+placeholder['TMPWORKLOADMONEY']
     placeholder['TMPOVERTIMEMONEY']=overtime_money
     placeholder['TMPSANCTIONS']=sanctions_money
@@ -480,8 +474,8 @@ def refundation_overview(role, hours):
 
 #             CONFIGURATION - SHOULD BE FROM COMMAND LINE
 
-month='2016-09'
-teams='praha senat'
+month='2016-11'
+teams='praha'
 
 #########################################################################
 #                       PROGRAM INTERNALS
@@ -491,7 +485,7 @@ teams='praha senat'
 # then we shall download all necessary information for the reports
 # for all team members included in one big chunk
 
-redmine = Redmine(settings.REDMINE_URL, key=settings.REDMINE_KEY, version=settings.REDMINE_VERSION)
+# redmine = Redmine(settings.REDMINE_URL, key=settings.REDMINE_KEY, version=settings.REDMINE_VERSION)
 
 
 if not month: # if month is not a valid time, use last month

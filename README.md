@@ -28,6 +28,16 @@ Workflow:
 #                      # superior to pay the requested amounts
 ```
 
+Install
+-------
+
+Ubuntu:
+
+
+```
+sudo -H pip3 install pandas czech_holidays tabulate termcolor trans
+```
+
 Scheme
 ------
 
