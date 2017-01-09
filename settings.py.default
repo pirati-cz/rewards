@@ -5,3 +5,5 @@ GITHUB_PAYROLL='https://raw.githubusercontent.com/pirati-byro/transparence/maste
 GITHUB_OTHERINCOMES='https://raw.githubusercontent.com/pirati-byro/transparence/master/other_incomes.csv'
 CONTRACTS_PREFIX='https://smlouvy.pirati.cz/smlouvy/'
 CONTRACTS_SUFFIX='/'
+RESULT_MONTH='2016-12'
+RESULT_TEAMS='senat'

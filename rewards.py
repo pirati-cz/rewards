@@ -254,7 +254,7 @@ def pretty_tasks(this_user_id,user_projects, user_issues):
 
 def create_work_report(project, user_id):
 
-    payee = payroll[ (payroll['Id'] == int(user_id)) & (payroll['Tým'] == project) ].iloc[0].copy()
+    payee = payroll[ (payroll['Id'] == int(float(user_id))) & (payroll['Tým'] == project) ].iloc[0].copy()
     # one person can have only one valid contract so this should be unique
     # for check - refer to check_payroll function
 
@@ -295,7 +295,7 @@ def create_work_report(project, user_id):
         # find all projects that have been solved separatelly
         # we need to remove these time_entries from the user_report
 
-        vysl = payroll.loc[ (payroll['Id'] == int(user_id) ) & payroll['Filtr'].notnull(), ['Filtr']  ]
+        vysl = payroll.loc[ (payroll['Id'] == int(float(user_id)) ) & payroll['Filtr'].notnull(), ['Filtr']  ]
 
         # if we found filter, we will use them
 
@@ -384,7 +384,7 @@ def create_work_report(project, user_id):
     placeholder['TMPMONEYRANGE']=str(agreed_fixed_money)+'–'+str(agreed_fixed_money+agreed_variable_money)+' Kč'
     placeholder['TMPCONSTMONEY']=actual_fixed_money
     placeholder['TMPTASKSMONEY']=tasks_money
-    placeholder['TMPVARMONEY']=placeholder['TMPTASKSMONEY']+placeholder['TMPWORKLOADMONEY']
+    placeholder['TMPVARMONEY']=placeholder['TMPTASKSMONEY']
     placeholder['TMPOVERTIMEMONEY']=overtime_money
     placeholder['TMPSANCTIONS']=sanctions_money
     placeholder['TMPPARTYMONEY']=placeholder['TMPCONSTMONEY']+placeholder['TMPVARMONEY']+placeholder['TMPOVERTIMEMONEY']-placeholder['TMPSANCTIONS']
@@ -474,8 +474,8 @@ def refundation_overview(role, hours):
 
 #             CONFIGURATION - SHOULD BE FROM COMMAND LINE
 
-month='2016-11'
-teams='praha'
+month=settings.RESULT_MONTH
+teams=settings.RESULT_TEAMS
 
 #########################################################################
 #                       PROGRAM INTERNALS

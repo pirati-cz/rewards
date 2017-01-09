@@ -54,16 +54,15 @@ příjem zdanil a zaplatil zákonné pojištění, pokud je nehradí plátce.
 
 ### Odměna dle smlouvy
 
-Složka příjmu                 | Přiznaná částka (Kč)
------------------             | --------------------:
-A.1 Pevná složka              | {TMPCONSTMONEY:8.2f}
-A.2 Variabilní složka         | {TMPVARMONEY:8.2f}
-*z toho*                      |
-A.2.1 Odměna za rozsah práce  | {TMPWORKLOADMONEY:8.2f}
-A.2.2 Odměna za splněné úkoly | {TMPTASKSMONEY:8.2f}
-A.3 Odměna za přesčas         | {TMPOVERTIMEMONEY:8.2f}
-A.4 Odpočet za výhrady        | {TMPSANCTIONS:8.2f}
-**Celková odměna**            | {TMPPARTYMONEY:8.2f}
+Složka příjmu                   | Přiznaná částka (Kč)
+-----------------               | --------------------:
+A.1 Pevná složka                | {TMPCONSTMONEY:8.2f}
+A.2 Variabilní složka           | {TMPVARMONEY:8.2f}
+*z toho*                        |
+A.2.1 Odměna za splněné úkoly   | {TMPTASKSMONEY:8.2f}
+A.2.2 Odpočet za výhrady        | {TMPSANCTIONS:8.2f}
+A.2.3 Odměna nad rámec smlouvy  | {TMPOVERTIMEMONEY:8.2f}
+**Celková odměna**              | {TMPPARTYMONEY:8.2f}
 
 {TMPMONEYCOMMENT}
 
