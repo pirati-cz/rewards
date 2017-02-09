@@ -38,6 +38,8 @@ Ubuntu:
 sudo -H pip3 install pandas czech_holidays tabulate termcolor trans
 ```
 
+Postupuji dle http://gsheets.readthedocs.io/en/latest/
+
 Scheme
 ------
 
@@ -47,7 +49,7 @@ STEP 1
 - [ ] apply to all users, download big chunk of data for the given month
 - [ ] apply to one user, find his reward_model and its parameters
 - [ ] calculate all the variables
-- [ ] if the file for the 
+- [ ] if the file for the
 - [ ] graph data
 - [ ] create local report template
 - [ ] create the summary for all users

@@ -4,7 +4,7 @@
 
 Generate reports of work performance and rewards for one person or a team
 '''
-
+ra
 import time
 
 start = time.time()
@@ -23,6 +23,37 @@ import json
 from termcolor import colored
 import math
 from trans import trans
+from gsheets import Sheets
+
+'''
+         PARSING
+'''
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('-v', '--verbose', action="store_true")
+
+subparsers = parser.add_subparsers(help='sub-command help')
+
+parser_report = subparsers.add_parser('teams', help='create or update report of work', aliases=['team'])
+parser_report.add_argument('-t', '--teams', nargs='*', help="project short name from redmine, such as 'praha'")
+parser_report.add_argument('-m', '--month', help='month such as 2016-02')
+parser_report.add_argument('-c', '--cache', action="store_true", help='use cache (do not download)')
+
+parser_remind = subparsers.add_parser('remind', help='remind the team members to fill in the rewards', aliases=['mail'])
+parser_remind.add_argument('-t', '--teams', nargs='*', help="project short name from redmine, such as 'praha'")
+parser_remind.add_argument('-m', '--month', help='month such as 2016-02')
+parser_remind.add_argument('number', help='the number for first and second reminder')
+
+parser_list = subparsers.add_parser('list', help='create organization wide list of contracts to see who is missing')
+parser_list.add_argument('-m', '--month', help='month such as 2016-02')
+parser_list.add_argument('-c', '--cache', action="store_true", help='use cache (do not download)')
+
+args = parser.parse_args()
+
+'''
+         FUNCTIONS
+'''
 
 def read_payroll():
     '''Read the data about the users from the payroll file'''
@@ -112,7 +143,7 @@ def create_link(startDate,endDate,user_ids,query='time_entries.csv'):
 def safe_download(link, target_file):
     '''Download given link in a safe manner and save under the target_file'''
 
-    if not os.path.isfile(target_file):
+    if not os.path.isfile(target_file) or not args.cache:
         print('Downloading file '+target_file)
         filename = wget.download(link)
         print("\n")
@@ -226,7 +257,7 @@ def pretty_tasks(this_user_id,user_projects, user_issues):
             'Hodiny': user_projects[ user_projects.Projekt == project]['Hodiny']
             }, ignore_index=True)
 
-        links += '[p'+number+']: '+create_link(startDate,endDate,this_user_id)+'&f[]=project_id&op[project_id]==&v[project_id][]='+number+'\n\n'
+        links += '[p'+number+']: '+create_link(startDate,endDate,this_user_id,'time_entries')+'&f[]=project_id&op[project_id]==&v[project_id][]='+number+'\n\n'
 
         these_issues = user_issues[user_issues.Projekt == project].copy().drop('Projekt', 1)
 
@@ -470,12 +501,30 @@ def refundation_overview(role, hours):
         total = 0
     return (justification,total)
 
+def download_sheet():
+
+    target_files = [ 'Lidé', 'Smlouvy', 'Týmy' ]
+
+    files_exist = True
+
+    for myfile in target_files:
+        if not os.path.isfile(myfile+'.csv'):
+            files_exist = False
+            break
+
+    if not files_exist or not args.cache:
+        sheets = Sheets.from_files('client_id.json', 'storage.json')
+        os.makedirs('.cache', exist_ok=True)
+        url = settings.PAYROLL_SHEET
+        s = sheets.get(url)
+        csv_name = lambda title, sheet, dialect: '.cache/%s.csv' % (sheet)
+        s.to_csv(make_filename=csv_name)
+
+
 #########################################################################
 
-#             CONFIGURATION - SHOULD BE FROM COMMAND LINE
-
-month=settings.RESULT_MONTH
-teams=settings.RESULT_TEAMS
+month=args.month
+teams=args.teams
 
 #########################################################################
 #                       PROGRAM INTERNALS
@@ -515,7 +564,7 @@ other_incomes = validate_contracts(other_incomes) # show only in the given time
 #print(payroll)
 used_projects = payroll['Tým'].unique()
 if teams:
-    teams = teams.split(' ')
+    #teams = teams.split(' ') - already done by the parser
     used_projects = map(find_project_by_identifier, teams)
 
 
