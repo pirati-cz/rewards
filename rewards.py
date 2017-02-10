@@ -4,7 +4,7 @@
 
 Generate reports of work performance and rewards for one person or a team
 '''
-ra
+
 import time
 
 start = time.time()
@@ -58,16 +58,34 @@ args = parser.parse_args()
 def read_payroll():
     '''Read the data about the users from the payroll file'''
 
-    link=settings.GITHUB_PAYROLL
-    target_file='.cache/payroll.csv'
-    safe_download(link, target_file)
+    download_sheet()
+#    link=settings.GITHUB_PAYROLL
+#    target_file='.cache/payroll.csv'
+#    safe_download(link, target_file)
 
+    tymy_df = pd.read_csv('.cache/Týmy.csv', header=0)
 
-    df = pd.read_csv(target_file, header=0)
+    #print(tymy_df)
+
+    lide_df = pd.read_csv('.cache/Lidé.csv', header=0)
+
+    #print(lide_df)
+
+    target_file = '.cache/Smlouvy.csv'
+    df = pd.read_csv(target_file, header=1)
     # payroll has not index, since the only unique field should be the contract url fragment
 
-    df['Začátek'] = pd.to_datetime(df['Začátek'])
-    df['Konec'] = pd.to_datetime(df['Konec'])
+    #print(df)
+
+    # now join the other tables
+    df = pd.merge(df, lide_df, how='inner' )
+    df = pd.merge(df, tymy_df, how='inner' ).sort_values('Příjmení')
+    df['Jméno a příjmení'] = df['Jméno'] + ' ' + df['Příjmení']
+
+    print(df.loc[ df.Platnost == 'platný' , ['Tým', 'Id', 'Jméno a příjmení', 'Funkce', 'týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet', 'Smlouva', 'Platí od', 'Platí do', 'Filtr', 'Zodpovídá']])
+
+    #df['Začátek'] = pd.to_datetime(df['Začátek'])
+    #df['Konec'] = pd.to_datetime(df['Konec'])
     return df
 
 def read_other_incomes():
@@ -430,7 +448,7 @@ def create_work_report(project, user_id):
     user_report.to_csv(user_path+'user_report.csv', sep=',', encoding='utf-8')
 
 
-    fp = open('user_template.md')
+    fp = open('templates/user_template.md')
     template = fp.read()
     template = template.format(**placeholder)
 
@@ -523,8 +541,10 @@ def download_sheet():
 
 #########################################################################
 
-month=args.month
-teams=args.teams
+if args.month:
+    month=args.month
+if args.teams:
+    teams=args.teams
 
 #########################################################################
 #                       PROGRAM INTERNALS
@@ -556,7 +576,10 @@ os.makedirs('.cache', exist_ok=True)
 projects_register = build_projects_register()
 year, monthalone = month.split('-')
 payroll = read_payroll()
+print(payroll)
 # filter only contracts, that are valid in some of the range given
+
+'''
 payroll = validate_contracts(payroll)
 other_incomes=read_other_incomes()
 other_incomes = validate_contracts(other_incomes) # show only in the given time
@@ -627,7 +650,7 @@ for project in used_projects:
 
     target_file=project_path+'README.md'
 
-    fp = open('team_template.md')
+    fp = open('templates/team_template.md')
     template = fp.read()
     template = template.format(**placeholder)
 
@@ -638,7 +661,7 @@ for project in used_projects:
 
     #break
 
-
+'''
 end = time.time()
 print('Time elapsed: {0:.3f} seconds. '.format(end - start))
 
