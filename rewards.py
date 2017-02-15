@@ -10,6 +10,7 @@ import time
 start = time.time()
 
 import pandas as pd
+import numpy as np
 from datetime import date, timedelta, datetime
 from dateutil.relativedelta import relativedelta
 import czech_holidays
@@ -24,6 +25,9 @@ from termcolor import colored
 import math
 from trans import trans
 from gsheets import Sheets
+import math
+import requests
+from github import Github
 
 '''
          PARSING
@@ -51,9 +55,20 @@ parser_list.add_argument('-c', '--cache', action="store_true", help='use cache (
 
 args = parser.parse_args()
 
+usecache = True
+# after debug set to args.cache
+
 '''
          FUNCTIONS
 '''
+
+def num2datestr(number):
+    ref_date = date(1900, 1, 1)   # referential date since the dates are returned starting 1899-12-30
+
+    if isinstance(number, float) and not math.isnan(number):
+        return (ref_date + timedelta(days=number - 2)).isoformat()
+    else:
+        return ""
 
 def read_payroll():
     '''Read the data about the users from the payroll file'''
@@ -72,7 +87,8 @@ def read_payroll():
     #print(lide_df)
 
     target_file = '.cache/Smlouvy.csv'
-    df = pd.read_csv(target_file, header=1)
+    df = pd.read_csv(target_file, header=1, dtype={'Id': np.int32, 'týdně': np.float32, 'Paušál': np.float32,
+                                                   'Kč/hod': np.float32, 'Úkolovka': np.float32, 'Odpočet': np.float32, 'Začátek': str, 'Konec': str})
     # payroll has not index, since the only unique field should be the contract url fragment
 
     #print(df)
@@ -82,22 +98,26 @@ def read_payroll():
     df = pd.merge(df, tymy_df, how='inner' ).sort_values('Příjmení')
     df['Jméno a příjmení'] = df['Jméno'] + ' ' + df['Příjmení']
 
-    print(df.loc[ df.Platnost == 'platný' , ['Tým', 'Id', 'Jméno a příjmení', 'Funkce', 'týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet', 'Smlouva', 'Platí od', 'Platí do', 'Filtr', 'Zodpovídá']])
+    # referential date since the dates are returned starting 1899-12-30
+    df['Začátek'] = df['Platí od'].apply(num2datestr)
+    df['Konec'] = df['Platí do'].apply(num2datestr)
 
-    #df['Začátek'] = pd.to_datetime(df['Začátek'])
-    #df['Konec'] = pd.to_datetime(df['Konec'])
-    return df
+    df.update(df[['týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet']].fillna(0.0))
+    df.update(df[['Filtr', 'Začátek', 'Konec']].fillna(""))
+
+    res = df[['Zkratka', 'Tým', 'Id', 'Jméno a příjmení', 'Funkce', 'týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet', 'Smlouva', 'Začátek', 'Konec', 'Filtr', 'Zodpovídá']].copy()
+    return res
 
 def read_other_incomes():
     '''Read the data about the users from the payroll file'''
 
-    link=settings.GITHUB_OTHERINCOMES
+    link=settings.GITHUB_TRANSPARENCY_REPO_RAW+settings.GITHUB_OTHERINCOMES
     target_file='.cache/otherincomes.csv'
     safe_download(link, target_file)
 
     df = pd.read_csv(target_file, header=0)
-    df['Začátek'] = pd.to_datetime(df['Začátek'])
-    df['Konec'] = pd.to_datetime(df['Konec'])
+    df['Začátek'] = pd.to_datetime(df['Začátek']).astype(str)
+    df['Konec'] = pd.to_datetime(df['Konec']).astype(str)
     return df
 
 def last_day(month):
@@ -107,7 +127,6 @@ def last_day(month):
     startDate = date(int(year), int(month), 1)
     endDate = (startDate + relativedelta(months=+1)) - timedelta(days=1)
     return endDate
-
 
 def business_days(startDate, endDate):
     '''Number of business days starting with the first day and
@@ -132,7 +151,6 @@ def business_days(startDate, endDate):
     business_days = set(business_days) - set(holidays)
     # print( [str(day) for day in business_days if day not in holidays ] )
     return len(business_days)
-
 
 def create_link(startDate,endDate,user_ids,query='time_entries.csv'):
     '''Creates link for downloading the csv data chunk or for printing the link
@@ -159,9 +177,9 @@ def create_link(startDate,endDate,user_ids,query='time_entries.csv'):
 
 
 def safe_download(link, target_file):
-    '''Download given link in a safe manner and save under the target_file'''
+    """Download given link in a safe manner and save under the target_file"""
 
-    if not os.path.isfile(target_file) or not args.cache:
+    if not (os.path.isfile(target_file) and usecache):
         print('Downloading file '+target_file)
         filename = wget.download(link)
         print("\n")
@@ -174,7 +192,6 @@ def safe_download(link, target_file):
         f.close()
         os.remove(filename)
 
-
 def get_data_chunk(startDate,endDate,user_ids):
 
     link=create_link(startDate,endDate,user_ids)
@@ -184,7 +201,6 @@ def get_data_chunk(startDate,endDate,user_ids):
     df = pd.read_csv(target_file, header=0, encoding='utf-8', engine='c')
     df = df[ df['Refundace'] != 'neproplácet' ]
     return df
-
 
 def find_project_by_name(name):
     try:
@@ -205,7 +221,7 @@ def find_project_by_identifier(identifier):
 
 
 def build_projects_register():
-    '''Retrieve the list of project names, shortlinks indexed by id'''
+    """Retrieve the list of project names, shortlinks indexed by id"""
     # after that we can use projects_register.loc['6','identifier']
     # or with lookup as in find_project_by_name
 
@@ -230,8 +246,13 @@ def build_projects_register():
     easylist = json.loads(open('.cache/filtered_projects.json').read())
     df = pd.DataFrame
     df = df.from_dict(easylist, orient='index')
-    return df
 
+
+    tymy_df = pd.read_csv('.cache/Týmy.csv', header=0)
+    tymy_df['name'] = tymy_df['Tým']
+
+    df = pd.merge(df, tymy_df, how='inner', on=['name'])
+    return df
 
 def issue_label_split(label):
     '''Split issue label to meaningful parts'''
@@ -244,7 +265,6 @@ def issue_label_split(label):
     number = str(int(number))
     return (number,name)
 
-
 def issue_label(row):
     '''Return the line for printing the issue'''
 
@@ -254,7 +274,6 @@ def issue_label(row):
     number, name = issue_label_split(row['Úkol'])
     line = '  [#'+number+' '+name+'][t'+number+']'
     return line
-
 
 def pretty_tasks(this_user_id,user_projects, user_issues):
 
@@ -305,11 +324,13 @@ def create_work_report(project, user_id):
 
     payee = payroll[ (payroll['Id'] == int(float(user_id))) & (payroll['Tým'] == project) ].iloc[0].copy()
     # one person can have only one valid contract so this should be unique
-    # for check - refer to check_payroll function
 
     user_name   = payee['Jméno a příjmení']
     user_filter = payee['Filtr']
     user_role = payee['Funkce']
+
+    zkratka = str(projects_register.loc[find_project_by_name(project),'Zkratka'])
+
 
     user_report = data_chunk[ data_chunk['Uživatel'] == user_name ].copy()
 
@@ -381,17 +402,22 @@ def create_work_report(project, user_id):
     actual_party_hours = user_report.loc[ ~user_report['Refundace'].notnull(), 'Hodiny' ].sum()
     actual_total_hours = refunded_hours+actual_party_hours
 
-    agreed_fixed_money = payee['Základ']
-    agreed_variable_money = payee['Bonus']
-    max_task_money = agreed_variable_money
-    daily_norm = payee['Doba']
+    agreed_fixed_money = payee['Paušál']
+    agreed_hourly_money = payee['Kč/hod']
+    agreed_task_money = payee['Úkolovka']
+    agreed_reduction = payee['Odpočet']
 
+    daily_norm = payee['týdně']
+
+    sum_hourly_money = actual_party_hours*agreed_hourly_money
+
+    print(payee)
+    print(bonuses)
+
+    actual_task_money = bonuses.loc[ (bonuses[ 'Jméno a příjmení'] == user_name) & (bonuses['Zkratka'] == zkratka) , ['Skutečná odměna']]
 
     agreed_monthly_norm = daily_norm * actual_business_days
     percentage = actual_total_hours/agreed_monthly_norm * 100.0
-    hourly_reward = agreed_fixed_money/agreed_monthly_norm
-    moneycomment = 'Podle smlouvy činila pevná složka dohodnuté odměny {0} Kč. '.format(agreed_fixed_money) + \
-    'Protože v měsíci {0} bylo {1} dnů, činila hodinová sazba částku {2:.2f} Kč. '.format(month, actual_business_days, hourly_reward)
 
     if actual_party_hours >= agreed_monthly_norm:
         actual_fixed_money = agreed_fixed_money
@@ -458,33 +484,30 @@ def create_work_report(project, user_id):
     #os.remove(filename)
     return (user_name, trans_user, refund_total_money, max_task_money, placeholder['TMPPARTYMONEY'])
 
-def check_payroll():
-    '''The integrity checks for the payroll. Please refer to create_work_report documentation.'''
-    raise NotImplementedError
+def normalized_date(mydate):
+    """Take a string as 2013-02-01 or zero string a and return a normalized date including infinity"""
 
+    try:
+        return datetime.strptime(mydate, '%Y-%m-%d').date()
+    except ValueError:
+        return datetime.max.date()
 
 def date_range(row):
-    '''Return boolean value whether the given row is has time intersect with dates'''
-    alfa=startDate
-    omega=endDate
+    """Return boolean value whether the given row has time intersect with dates."""
+    t1start=startDate
+    t1end=endDate
 
-    alfa=max(row['Začátek'].date(), alfa)
+    t2start = normalized_date(row['Začátek'])
+    t2end = normalized_date(row['Konec'])
 
-    if not pd.isnull(row['Konec']):
-        omega=min(row['Konec'].date(), omega)
-
-    if omega<alfa:
-        return False
-    else:
-        return True
+    return (t1start <= t2start <= t1end) or (t2start <= t1start <= t2end)
 
 
 def validate_contracts(payroll):
-    '''Return payroll in the given period.'''
+    """Return payroll in the given period."""
 
     mask = payroll.apply(date_range, axis=1)
-    return payroll[ mask ]
-
+    return payroll[mask]
 
 def refundation_overview(role, hours):
     '''This will print part of the report of other incomes of the person
@@ -526,11 +549,12 @@ def download_sheet():
     files_exist = True
 
     for myfile in target_files:
-        if not os.path.isfile(myfile+'.csv'):
+        if not os.path.isfile('.cache/'+myfile+'.csv'):
             files_exist = False
             break
 
-    if not files_exist or not args.cache:
+
+    if not files_exist or not usecache:
         sheets = Sheets.from_files('client_id.json', 'storage.json')
         os.makedirs('.cache', exist_ok=True)
         url = settings.PAYROLL_SHEET
@@ -539,12 +563,143 @@ def download_sheet():
         s.to_csv(make_filename=csv_name)
 
 
+def create_monthly_bonus_table(payroll):
+    """Create a table from the payroll for the given month"""
+
+    # postup: otestujeme existenci, pokud existuje, sloučíme, pokud ne, vytvoříme a odešleme
+    mypath = 'odmeny/'+year+'-'+monthalone+'.tsv'
+    mylink = settings.GITHUB_TRANSPARENCY_REPO_RAW+mypath
+    r = requests.get(mylink)
+
+    target_cache_file='.cache/monthly_bonuses.tsv'
+
+
+    if r.status_code == requests.codes.ok:
+        print('The file already exist on the server. You can find it on the address:')
+        print(settings.GITHUB_TRANSPARENCY_REPO+mypath)
+     # NOT FINISHED:
+     #   if prompt('Do you wish to UPDATE the file from the current payroll?'):
+     #       # we will update the github file with google file
+     #       github_payroll = pd.read_csv(target_cache_file, sep='\t', encoding='utf-8', header=0)
+     #       df = pd.merge(df, lide_df, how='inner')
+     #       gh = Github(GITHUB_USER, GITHUB_PASS)
+     #       repository = gh.repository('organization-name', 'repository-name')
+     #   else:
+     #       return None
+    else:  # file does not exist and will be created form google payroll
+
+        payroll = payroll[payroll['Úkolovka']>0.0].sort_values('Zodpovídá')
+
+        payroll.to_csv(target_cache_file, sep='\t', encoding='utf-8',
+            columns=['Zkratka', 'Zodpovídá', 'Jméno a příjmení', 'Funkce', 'Úkolovka', 'Skutečná odměna'], index=False)
+
+        fp = open(target_cache_file)
+        file_contents = fp.read()
+
+        g = Github(settings.GITHUB_USER, settings.GITHUB_PASS)
+
+        org = g.get_organization(settings.GITHUB_ORG)
+        repo = org.get_repo(settings.GITHUB_REPO)
+        print(repo)
+        print(file_contents)
+        repo.create_file("/"+mypath, 'Vzdálené vytvoření souboru s bonusy za '+month, file_contents)
+
+
+def report_time(start):
+    print('Time elapsed: {0:.3f} seconds. '.format(time.time() - start))
+
+
+def load_bonuses(month):
+    """Given the month as string (such as 2017-02), return the pandas dataframe with the bonuses (variable part of
+    income) """
+
+    mypath = 'odmeny/'+year+'-'+monthalone+'.tsv'
+    mylink = settings.GITHUB_TRANSPARENCY_REPO_RAW+mypath
+    r = requests.get(mylink)
+
+    target_cache_file='.cache/monthly_bonuses.tsv'
+
+    if r.status_code == requests.codes.ok:
+        safe_download(mylink, target_cache_file)
+    else:  # file does not exist and has to be created first
+        FileNotFoundError('The file with bonuses does not yet exist. You have to create it first with command ...')
+
+    df = pd.read_csv(target_cache_file, header=0, sep='\t', encoding='utf-8')
+    return df
+
+def generate_project_files(project):
+    """Create all the contract work files for the given project"""
+
+    target_cache_file='.cache/monthly_bonuses.tsv'
+
+
+    mypath = 'odmeny/' + year + '-' + monthalone + '.tsv'
+    mylink = settings.GITHUB_TRANSPARENCY_REPO_RAW + mypath
+    zkratka = str(projects_register.loc[find_project_by_name(project),'Zkratka'])
+
+    project_path = zkratka + '/' + year + '/' + monthalone + '/'
+    os.makedirs('.cache/'+project_path, exist_ok=True)
+
+    # one person can have only one role in a given project
+    print('\n\n' + colored('printing project ' + project, 'blue'))
+    project_users = payroll[payroll['Tým'] == project].copy()
+    user_ids = project_users['Id'].astype(str).tolist()
+
+    # task_reward_file = project_path + 'task_rewards.csv'
+    # second_run = os.path.isfile(task_reward_file)
+
+    #if second_run:
+        # read the tasks data
+    tasks_data = bonuses[ bonuses['Zkratka'] == zkratka ].fillna(0.0)
+
+        # print(tasks_data)
+    # print (user_ids)
+
+    # we shall create report for one user from now on
+
+    #project_summary = pd.DataFrame(
+    #    columns=['Jméno a příjmení', 'Identifikátor', 'Refundace', 'Max za úkoly', 'Odměna clk.'])
+
+    links = '\n\n'
+
+    for user_id in user_ids:
+        # print('printing for user '+user_id)
+        user_name, trans_user, refund_total_money, max_task_money, party_money = create_work_report(project, user_id)
+        project_summary = project_summary.append({'Jméno a příjmení': user_name, 'Identifikátor': trans_user,
+                                                  'Refundace': refund_total_money, 'Max za úkoly': max_task_money,
+                                                  'Odměna clk.': party_money}, ignore_index=True)
+        # break
+    project_summary = project_summary.round(0)
+
+    # 1. print to console
+    print(project_summary[['Jméno a příjmení', 'Refundace', 'Odměna clk.']])
+
+
+    # 3. create a project report
+
+    project_summary['Link'] = '[' + project_summary['Jméno a příjmení'] + '](' + project_summary['Identifikátor'] + '/)'
+    project_summary = project_summary[['Link', 'Odměna clk.']]
+    team_table = tabulate(project_summary.as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'],
+                          tablefmt="pipe", floatfmt=".2f")
+
+    placeholder = {}
+    placeholder['TMPTEAM'] = project
+    placeholder['TMPTIMERANGE'] = month
+    placeholder['TMPTEAMTABLE'] = team_table
+
+    target_file = project_path + 'README.md'
+
+    fp = open('templates/team_template.md')
+    template = fp.read()
+    template = template.format(**placeholder)
+
+    f = open(target_file, 'w+')
+    f.write(template)
+    f.close()
+
 #########################################################################
 
-if args.month:
-    month=args.month
-if args.teams:
-    teams=args.teams
+
 
 #########################################################################
 #                       PROGRAM INTERNALS
@@ -557,113 +712,66 @@ if args.teams:
 # redmine = Redmine(settings.REDMINE_URL, key=settings.REDMINE_KEY, version=settings.REDMINE_VERSION)
 
 
-if not month: # if month is not a valid time, use last month
+# dates are always gonna be date types
+# month is goint to be simple string such as '2016-02'
 
+# RESOLVING THE CORRECT MONTH(S)
+
+try:
+    month=args.month
+except AttributeError:
+    # if month is not a valid time, use last month
     today = date.today()
     first = today.replace(day=1)
     lastMonth = first - timedelta(days=1)
     month = str(lastMonth.strftime("%Y-%m"))
 
-# dates are always gonna be date types
-# month is goint to be simple string such as '2016-02'
+month='2017-01'
 
 startDate=datetime.strptime(month+'-01', '%Y-%m-%d').date()
 endDate=last_day(month)
 actual_business_days = business_days(startDate,endDate)
 
+
 os.makedirs('.cache', exist_ok=True)
 
 projects_register = build_projects_register()
+print(projects_register)
 year, monthalone = month.split('-')
 payroll = read_payroll()
-print(payroll)
-# filter only contracts, that are valid in some of the range given
 
-'''
-payroll = validate_contracts(payroll)
+#print(payroll)
+
+payroll = validate_contracts(payroll) # filter only contracts, that are valid in some of the range given
+
+#print(payroll)
+
 other_incomes=read_other_incomes()
 other_incomes = validate_contracts(other_incomes) # show only in the given time
 
-#print(payroll)
 used_projects = payroll['Tým'].unique()
-if teams:
-    #teams = teams.split(' ') - already done by the parser
-    used_projects = map(find_project_by_identifier, teams)
 
+#try:
+#    teams=args.teams
+#    teams = map(find_project_by_identifier, teams)  # convert to project ids
+#except AttributeError:
+
+teams = used_projects
+
+# print(teams)
 
 user_ids = payroll['Id'].copy().astype(str).tolist()
 data_chunk = get_data_chunk(startDate,endDate,user_ids)
 
+# create_monthly_bonus_table(payroll) # should be linked to command line parameters
+
+bonuses = load_bonuses(month)
+
+# print(bonuses)
+
 for project in used_projects:
-    identifier = projects_register.loc[str(find_project_by_name(project)),'identifier']
-    project_path = 'output/'+identifier+'/'+year+'/'+monthalone+'/'
-    os.makedirs(project_path, exist_ok=True)
-
-    # one person can have only one role in a given project
-    print('\n\n'+colored('printing project '+project, 'blue'))
-    project_users = payroll[ payroll['Tým'] == project ].copy()
-    user_ids = project_users['Id'].astype(str).tolist()
-
-    task_reward_file=project_path+'task_rewards.csv'
-
-    second_run = os.path.isfile(task_reward_file)
-    if second_run:
-        # read the tasks data
-        tasks_data = pd.read_csv(task_reward_file, sep=',', encoding='utf-8', header=0, index_col=0)
-        #print(tasks_data)
-    # print (user_ids)
-
-    # we shall create report for one user from now on
-
-    project_summary = pd.DataFrame(columns=['Jméno a příjmení', 'Identifikátor', 'Refundace', 'Max za úkoly', 'Odměna clk.'])
-
-    links = '\n\n'
-
-    for user_id in user_ids:
-        # print('printing for user '+user_id)
-        user_name, trans_user, refund_total_money, max_task_money, party_money = create_work_report(project, user_id)
-        project_summary = project_summary.append({'Jméno a příjmení': user_name, 'Identifikátor': trans_user,
-            'Refundace': refund_total_money, 'Max za úkoly': max_task_money, 'Odměna clk.': party_money}, ignore_index=True)
-        #break
-    project_summary = project_summary.round(0)
-
-    # 1. print to console
-    print(project_summary[[ 'Jméno a příjmení', 'Refundace', 'Odměna clk.' ]])
-
-    # 2. save to file if not exist
-
-    if not second_run:
-        project_summary['Úkolovka'] = 0.0
-        project_summary['Sankce'] = 0.0
-        project_summary.to_csv(task_reward_file, sep=',', encoding='utf-8', columns=['Jméno a příjmení', 'Refundace', 'Max za úkoly', 'Úkolovka', 'Sankce' ])
-
-    # 3. create a project report
-
-    project_summary['Link'] = '['+project_summary['Jméno a příjmení']+']('+project_summary['Identifikátor']+'/)'
-    project_summary = project_summary[[ 'Link', 'Odměna clk.' ]]
-    team_table = tabulate(project_summary.as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'], tablefmt="pipe", floatfmt=".2f")
-
-    placeholder = {}
-    placeholder['TMPTEAM']=project
-    placeholder['TMPTIMERANGE']=month
-    placeholder['TMPTEAMTABLE']=team_table
-
-    target_file=project_path+'README.md'
-
-    fp = open('templates/team_template.md')
-    template = fp.read()
-    template = template.format(**placeholder)
-
-    f = open(target_file,'w+')
-    f.write(template)
-    f.close()
-
-
-    #break
-
-'''
-end = time.time()
-print('Time elapsed: {0:.3f} seconds. '.format(end - start))
+    generate_project_files(project)
+    pass
 
 '''
 print(user_projects)
