@@ -1,9 +1,13 @@
-REDMINE_URL = 'https://redmine.pirati.cz'
-REDMINE_KEY = 'fill in the API key generated online'
-REDMINE_VERSION = '3.3.0'
-GITHUB_PAYROLL='https://raw.githubusercontent.com/pirati-byro/transparence/master/payroll.csv.default'
-GITHUB_OTHERINCOMES='https://raw.githubusercontent.com/pirati-byro/transparence/master/other_incomes.csv'
+PAYROLL_SHEET = 'https://docs.google.com/spreadsheets/d/1v6PH1cYvLkU-JvAAUVV6G0caNCcQa1SkqoBsAWLuPpI/edit?ts=589ba342#gid=1547903023'
+
+GITHUB_OTHERINCOMES='other_incomes.csv'
+GITHUB_USER=''
+GITHUB_PASS=''
+GITHUB_ORG='pirati-byro'
+GITHUB_REPO='transparence'
+
 CONTRACTS_PREFIX='https://smlouvy.pirati.cz/smlouvy/'
 CONTRACTS_SUFFIX='/'
-RESULT_MONTH='2016-12'
-RESULT_TEAMS='senat'
+
+GITHUB_TRANSPARENCY_REPO='https://github.com/'+GITHUB_ORG+'/'+GITHUB_REPO+'/'
+GITHUB_TRANSPARENCY_REPO_RAW ='https://raw.githubusercontent.com/'+GITHUB_ORG+'/'+GITHUB_REPO+'/master/'
