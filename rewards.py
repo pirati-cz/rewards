@@ -49,10 +49,6 @@ parser_remind.add_argument('-t', '--teams', nargs='*', help="project short name 
 parser_remind.add_argument('-m', '--month', help='month such as 2016-02')
 parser_remind.add_argument('number', help='the number for first and second reminder')
 
-parser_list = subparsers.add_parser('list', help='create organization wide list of contracts to see who is missing')
-parser_list.add_argument('-m', '--month', help='month such as 2016-02')
-parser_list.add_argument('-c', '--cache', action="store_true", help='use cache (do not download)')
-
 args = parser.parse_args()
 
 usecache = True
@@ -73,7 +69,7 @@ def num2datestr(number):
 def read_payroll():
     '''Read the data about the users from the payroll file'''
 
-    download_sheet()
+
 #    link=settings.GITHUB_PAYROLL
 #    target_file='.cache/payroll.csv'
 #    safe_download(link, target_file)
@@ -88,7 +84,8 @@ def read_payroll():
 
     target_file = '.cache/Smlouvy.csv'
     df = pd.read_csv(target_file, header=1, dtype={'Id': np.int32, 'týdně': np.float32, 'Paušál': np.float32,
-                                                   'Kč/hod': np.float32, 'Úkolovka': np.float32, 'Odpočet': np.float32, 'Začátek': str, 'Konec': str})
+                                                   'Kč/hod': np.float32, 'Úkolovka': np.float32, 'Odpočet': np.float32,
+                                                   'Úkol': str, 'Začátek': str, 'Konec': str, 'Zatřídění':str})
     # payroll has not index, since the only unique field should be the contract url fragment
 
     #print(df)
@@ -103,9 +100,11 @@ def read_payroll():
     df['Konec'] = df['Platí do'].apply(num2datestr)
 
     df.update(df[['týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet']].fillna(0.0))
-    df.update(df[['Filtr', 'Začátek', 'Konec']].fillna(""))
+    df.update(df[[ 'Začátek', 'Konec', 'Úkol']].fillna(""))
 
-    res = df[['Zkratka', 'Tým', 'Id', 'Jméno a příjmení', 'Funkce', 'týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet', 'Smlouva', 'Začátek', 'Konec', 'Filtr', 'Zodpovídá']].copy()
+    res = df[['Zkratka', 'Tým', 'Id', 'Jméno a příjmení','Typ' ,'Funkce', 'týdně', 'Paušál', 'Kč/hod',
+              'Úkolovka', 'Max','Odpočet', 'Smlouva', 'Úkol', 'Začátek', 'Konec', 'Filtr', 'Zodpovídá',
+              'Zatřídění']].copy()
     return res
 
 def read_other_incomes():
@@ -203,6 +202,7 @@ def get_data_chunk(startDate,endDate,user_ids):
     return df
 
 def find_project_by_name(name):
+
     try:
         number = projects_register[ projects_register['name'] == name ].index.values[0]
         #projects_register[ projects_register.name == name ]['identifier'].iloc[0]
@@ -251,7 +251,7 @@ def build_projects_register():
     tymy_df = pd.read_csv('.cache/Týmy.csv', header=0)
     tymy_df['name'] = tymy_df['Tým']
 
-    df = pd.merge(df, tymy_df, how='inner', on=['name'])
+    df = pd.merge(df, tymy_df, how='left', on=['name'])
     return df
 
 def issue_label_split(label):
@@ -260,7 +260,7 @@ def issue_label_split(label):
     # Input: Úkol #3296: Zasedání zastupitelstva 16. 6. 2016
     # Output: [3296,Zasedání zastupitelstva 16. 6. 2016]
 
-    first, name = label.split(': ')
+    first, name = label.split(': ',1)
     tracker, number = first.split(' #')
     number = str(int(number))
     return (number,name)
@@ -286,6 +286,7 @@ def pretty_tasks(this_user_id,user_projects, user_issues):
 
     new_table = pd.DataFrame(columns=['Úkol', 'Hodiny'])
     links = '\n\n'
+
 
     for project in projects:
         number = str(find_project_by_name(project))
@@ -320,20 +321,23 @@ def pretty_tasks(this_user_id,user_projects, user_issues):
 
     return (output, links)
 
-def create_work_report(project, user_id):
+def create_work_report(project, user_id,project_path):
 
     payee = payroll[ (payroll['Id'] == int(float(user_id))) & (payroll['Tým'] == project) ].iloc[0].copy()
     # one person can have only one valid contract so this should be unique
+
 
     user_name   = payee['Jméno a příjmení']
     user_filter = payee['Filtr']
     user_role = payee['Funkce']
 
+    user_rm = settings.REDMINE_URL+'/issues/'+str(payee['Úkol'])
+
+
     zkratka = str(projects_register.loc[find_project_by_name(project),'Zkratka'])
 
 
     user_report = data_chunk[ data_chunk['Uživatel'] == user_name ].copy()
-
 
     #print(user_name)
     #print(user_filter)
@@ -347,6 +351,7 @@ def create_work_report(project, user_id):
     # there can be at most one valid contract for one person that has no filter
     # (otherwise it would not be clear to which contract we would atribute it)
     justification=''
+
     if isinstance(user_filter, str):
         # restricted report, the filter is given as a string
         filters = user_filter.split(':')
@@ -358,6 +363,7 @@ def create_work_report(project, user_id):
             justification += '\nSmlouva se vztahuje pouze na čas vykázaný v rámci projektů {0}. '.format(', '.join(filters))
         justification += 'Čas vykázaný v jiných projektech není v tomto výkazu zahrnut, ale může být ve výkazu daného týmu. \n'
     else:
+
         # the full report - should also take into account all refunds, except
         # the "neproplácet" - since they are relevant to money
         # the filter is given as nan - float
@@ -384,13 +390,16 @@ def create_work_report(project, user_id):
                 justification += 'jsou pouze oddělené projekty '
             justification += ', '.join(filters) + '. Oddělené projekty ovšem mohou být odměňovány podle zvláštní smlouvy.'
 
-        else: justification = 'Smlouva se vztahuje na všechny projekty. '
+        else:
+            justification = 'Smlouva se vztahuje na všechny projekty. '
 
-    # print(user_report)
+
+
 
     user_projects = user_report.groupby('Projekt', as_index=False).sum().sort_values(by='Hodiny',ascending=0)
     user_issues = user_report.groupby(['Úkol','Projekt'], as_index=False).sum()
     user_issues = user_issues[ user_issues.Hodiny > 3.0 ].sort_values(by=['Hodiny'],ascending=[0])
+
 
     table, links = pretty_tasks(user_id,user_projects, user_issues)
 
@@ -398,76 +407,109 @@ def create_work_report(project, user_id):
     # actual_party_salary(month, actual_party_hours, actual_total_hours,
     #   daily_norm, agreed_fixed_money, agreed_task_money)
 
-    refunded_hours = user_report.loc[ user_report['Refundace'].notnull(), 'Hodiny' ].sum()
-    actual_party_hours = user_report.loc[ ~user_report['Refundace'].notnull(), 'Hodiny' ].sum()
-    actual_total_hours = refunded_hours+actual_party_hours
+    skutecna_refundovana_prace = user_report.loc[ user_report['Refundace'].notnull(), 'Hodiny' ].sum()
+    skutecna_prace = user_report.loc[ ~user_report['Refundace'].notnull(), 'Hodiny' ].sum()
+    skutecne_hodiny_celkem = skutecna_prace+skutecna_refundovana_prace
 
-    agreed_fixed_money = payee['Paušál']
-    agreed_hourly_money = payee['Kč/hod']
-    agreed_task_money = payee['Úkolovka']
-    agreed_reduction = payee['Odpočet']
 
-    daily_norm = payee['týdně']
 
-    sum_hourly_money = actual_party_hours*agreed_hourly_money
+    # SLOVNÍČEK
 
-    print(payee)
-    print(bonuses)
+    smluvni_pausal = payee['Paušál']     # PAUŠÁL
+    smluvni_hodinovka = payee['Kč/hod']  # HODINOVKA
+    smluvni_ukolovka = payee['Úkolovka'] # ÚKOLOVKA
+    smluvni_odpocet = payee['Odpočet']   # ODPOČET
 
-    actual_task_money = bonuses.loc[ (bonuses[ 'Jméno a příjmení'] == user_name) & (bonuses['Zkratka'] == zkratka) , ['Skutečná odměna']]
+    smluvni_hodiny = payee['týdně']
 
-    agreed_monthly_norm = daily_norm * actual_business_days
-    percentage = actual_total_hours/agreed_monthly_norm * 100.0
+    skutecny_pausal=smluvni_pausal
 
-    if actual_party_hours >= agreed_monthly_norm:
-        actual_fixed_money = agreed_fixed_money
-        overtime_hours = actual_party_hours - agreed_monthly_norm
-        overtime_money = hourly_reward*overtime_hours
-        moneycomment += 'Došlo k překročení dohodnutého počtu hodin. ' + \
-        'Vyplácí se tedy pevná složka odměny ve výši {0} Kč '.format(agreed_fixed_money)
-        'a dále za {0:.2f} hodin přesčas náleží odměna {1:.2f} Kč. '.format(overtime_hours, overtime_money)
+    skutecna_hodinovka = skutecna_prace*smluvni_hodinovka
+
+    try:
+        bonus_line = bonuses[(bonuses['Jméno a příjmení'] == user_name) & (bonuses['Zkratka'] == zkratka)].iloc[0].copy()
+        skutecna_ukolovka = bonus_line['Skutečná odměna']
+        skutecny_odpocet = bonus_line['Odpočet']
+    except:
+        skutecna_ukolovka = 0.0
+        skutecny_odpocet = 0.0
+
+    smluvni_odhad_mesicne = smluvni_hodiny/5.0 * actual_business_days
+
+    if smluvni_odhad_mesicne:
+        skutecne_procento = skutecne_hodiny_celkem/smluvni_odhad_mesicne * 100.0
     else:
-        actual_fixed_money = hourly_reward*actual_party_hours
-        overtime_money = 0.0
-        moneycomment += 'Nedošlo k překročení dohodnutého počtu hodin. ' + \
-        'Za {0:.2f} hodin náleží pevná složka odměny ve výši {1:.2f} Kč. '.format(actual_party_hours, actual_fixed_money)
+        skutecne_procento = 100.0
 
-    links += '\n\n[smlouva]: '+settings.CONTRACTS_PREFIX+payee['Smlouva']+settings.CONTRACTS_SUFFIX
-    refund_comment,refund_total_money = refundation_overview(user_role, refunded_hours)
-
-    if second_run:
-        # read the tasks data
-        tasks_money=tasks_data[ tasks_data['Jméno a příjmení'] == user_name ]['Úkolovka'].iloc[0]
-        sanctions_money=tasks_data[ tasks_data['Jméno a příjmení'] == user_name ]['Sankce'].iloc[0]
+    if skutecna_prace >= smluvni_odhad_mesicne:
+        skutecna_hodinovka_pod = smluvni_odhad_mesicne*smluvni_hodinovka
+        skutecna_hodinovka_nad = (skutecna_prace-smluvni_odhad_mesicne) * smluvni_hodinovka
     else:
-        tasks_money=0
-        sanctions_money=0
+        skutecna_hodinovka_pod = skutecna_prace*smluvni_hodinovka
+        skutecna_hodinovka_nad = 0.0
+
+    links += '\n\n[smlouva]: '+str(payee['Smlouva'])
+    refund_comment,refund_total_money = refundation_overview(user_role, skutecna_refundovana_prace)
+
+    skutecna_mimoradna_odmena = 0.0
+
+
+    if float(skutecna_ukolovka) > float(smluvni_ukolovka):
+        skutecna_mimoradna_odmena = skutecna_ukolovka-smluvni_ukolovka
+        skutecna_ukolovka = smluvni_ukolovka
+
+    skutecna_odmena_celkem = float(skutecny_pausal)+float(skutecna_hodinovka)+float(skutecna_mimoradna_odmena)+float(skutecna_ukolovka)-float(skutecny_odpocet)
+
+    pretty_date = datetime.strptime(payee['Začátek'], '%Y-%m-%d')
+    trans_user=trans(user_name.replace(' ','-').lower())
+
+    max_odmena = float(payee['Max'])
+    if skutecna_odmena_celkem > max_odmena > 0.0:
+        skutecny_odpocet = skutecny_odpocet + skutecna_odmena_celkem - max_odmena
+        skutecna_odmena_celkem = max_odmena
+
 
     # VARIABLES ASSIGNATION FOR TEMPLATE
     placeholder = {}
     placeholder['TMPNAME']=user_name
+    placeholder['TMPTRANSLIT'] = trans_user
     placeholder['TMPTEAM']=payee['Tým']
+    placeholder['TMPZKRATKA']=zkratka
     placeholder['TMPFUNCTION']=user_role
-    placeholder['TMPCONTRACT']='[smlouva ze dne {0}'.format(payee['Začátek'].strftime("%-d. %-m. %Y"))+'][smlouva]'
+    placeholder['TMPCONTRACT']='[smlouva ze dne {0}'.format(pretty_date.strftime("%-d. %-m. %Y"))+'][smlouva]'
     placeholder['TMPTIMERANGE']=month
     placeholder['TMPTASKS']=table+'\n\n'+justification
-    placeholder['TMPPARTYHOURS']=actual_party_hours
-    placeholder['TMPCITYHOURS']=refunded_hours
-    placeholder['TMPTOTALHOURS']=actual_total_hours
-    placeholder['TMPNORM']=agreed_monthly_norm
-    placeholder['TMPPERCENTAGE']=percentage
-    placeholder['TMPMONEYRANGE']=str(agreed_fixed_money)+'–'+str(agreed_fixed_money+agreed_variable_money)+' Kč'
-    placeholder['TMPCONSTMONEY']=actual_fixed_money
-    placeholder['TMPTASKSMONEY']=tasks_money
-    placeholder['TMPVARMONEY']=placeholder['TMPTASKSMONEY']
-    placeholder['TMPOVERTIMEMONEY']=overtime_money
-    placeholder['TMPSANCTIONS']=sanctions_money
-    placeholder['TMPPARTYMONEY']=placeholder['TMPCONSTMONEY']+placeholder['TMPVARMONEY']+placeholder['TMPOVERTIMEMONEY']-placeholder['TMPSANCTIONS']
-    placeholder['TMPMONEYCOMMENT']=moneycomment
+
+    placeholder['TMP_SMLUVNI_HODINY']=float(smluvni_hodiny)
+    placeholder['TMP_SMLUVNI_ODHAD_MESICNE']=float(smluvni_odhad_mesicne)
+    placeholder['TMP_SKUTECNA_PRACE']=float(skutecna_prace)
+    placeholder['TMP_SKUTECNA_REFUNDOVANA_PRACE']=float(skutecna_refundovana_prace)
+    placeholder['TMP_SKUTECNE_HODINY_CELKEM']=float(skutecne_hodiny_celkem)
+    placeholder['TMP_SKUTECNE_PROCENTO']=float(skutecne_procento)
+
+    placeholder['TMP_SMLUVNI_PAUSAL']=float(smluvni_pausal)
+    placeholder['TMP_SMLUVNI_HODINOVKA']=float(smluvni_hodinovka)
+    placeholder['TMP_SMLUVNI_UKOLOVKA']=float(smluvni_ukolovka)
+    placeholder['TMP_SMLUVNI_ODPOCET']=float(smluvni_odpocet)
+
+    placeholder['TMP_SKUTECNY_PAUSAL']=float(skutecny_pausal)
+    placeholder['TMP_SKUTECNA_HODINOVKA_POD']=float(skutecna_hodinovka_pod)
+    placeholder['TMP_SKUTECNA_HODINOVKA_NAD']=float(skutecna_hodinovka_nad)
+    placeholder['TMP_SKUTECNA_UKOLOVKA']=float(skutecna_ukolovka)
+    placeholder['TMP_SKUTECNA_MIMORADNA_ODMENA']=float(skutecna_mimoradna_odmena)
+    placeholder['TMP_SKUTECNY_ODPOCET']=float(skutecny_odpocet)
+    placeholder['TMP_SKUTECNA_ODMENA_CELKEM']=float(skutecna_odmena_celkem)
+    placeholder['TMP_SKUTECNA_REFUNDACE']=float(refund_total_money)
+
+
     placeholder['TMPREFUNDS']=refund_comment
     placeholder['TMPLINKS']=links
+    placeholder['TMP_HODNOCENI']=user_rm
 
-    trans_user=trans(user_name.replace(' ','-').lower())
+    placeholder['TMP_ZATRIDENI']=payee['Zatřídění']
+    placeholder['TMP_TYP']=payee['Typ']
+
+
     user_path = project_path+trans_user+'/'
     os.makedirs(user_path, exist_ok=True)
     target_file=user_path+'README.md'
@@ -482,7 +524,10 @@ def create_work_report(project, user_id):
     f.write(template)
     f.close()
     #os.remove(filename)
-    return (user_name, trans_user, refund_total_money, max_task_money, placeholder['TMPPARTYMONEY'])
+
+    df = pd.DataFrame([placeholder])
+
+    return df
 
 def normalized_date(mydate):
     """Take a string as 2013-02-01 or zero string a and return a normalized date including infinity"""
@@ -567,7 +612,7 @@ def create_monthly_bonus_table(payroll):
     """Create a table from the payroll for the given month"""
 
     # postup: otestujeme existenci, pokud existuje, sloučíme, pokud ne, vytvoříme a odešleme
-    mypath = 'odmeny/'+year+'-'+monthalone+'.tsv'
+    mypath = 'odmeny/' + year + '/' + monthalone + '/odmeny.tsv'
     mylink = settings.GITHUB_TRANSPARENCY_REPO_RAW+mypath
     r = requests.get(mylink)
 
@@ -590,8 +635,10 @@ def create_monthly_bonus_table(payroll):
 
         payroll = payroll[payroll['Úkolovka']>0.0].sort_values('Zodpovídá')
 
+        payroll[payroll['Úkolovka']==0.0]['Skutečná odměna']=0.0
+
         payroll.to_csv(target_cache_file, sep='\t', encoding='utf-8',
-            columns=['Zkratka', 'Zodpovídá', 'Jméno a příjmení', 'Funkce', 'Úkolovka', 'Skutečná odměna'], index=False)
+            columns=['Zkratka', 'Zodpovídá', 'Jméno a příjmení', 'Funkce', 'Úkolovka', 'Skutečná odměna', 'Odpočet'], index=False)
 
         fp = open(target_cache_file)
         file_contents = fp.read()
@@ -613,7 +660,7 @@ def load_bonuses(month):
     """Given the month as string (such as 2017-02), return the pandas dataframe with the bonuses (variable part of
     income) """
 
-    mypath = 'odmeny/'+year+'-'+monthalone+'.tsv'
+    mypath = 'odmeny/' + year + '/' + monthalone + '/odmeny.tsv'
     mylink = settings.GITHUB_TRANSPARENCY_REPO_RAW+mypath
     r = requests.get(mylink)
 
@@ -624,7 +671,11 @@ def load_bonuses(month):
     else:  # file does not exist and has to be created first
         FileNotFoundError('The file with bonuses does not yet exist. You have to create it first with command ...')
 
-    df = pd.read_csv(target_cache_file, header=0, sep='\t', encoding='utf-8')
+    df = pd.read_csv(target_cache_file, header=0, sep='\t', encoding='utf-8', dtype={'Skutečná odměna': np.float32,
+                                                   'Úkolovka': np.float32, 'Odpočet': np.float32})
+
+    df.update(df[['Odpočet', 'Skutečná odměna']].fillna(0.0))
+
     return df
 
 def generate_project_files(project):
@@ -633,15 +684,16 @@ def generate_project_files(project):
     target_cache_file='.cache/monthly_bonuses.tsv'
 
 
-    mypath = 'odmeny/' + year + '-' + monthalone + '.tsv'
+    mypath = 'odmeny/' + year + '/' + monthalone + '/odmeny.tsv'
     mylink = settings.GITHUB_TRANSPARENCY_REPO_RAW + mypath
+
     zkratka = str(projects_register.loc[find_project_by_name(project),'Zkratka'])
 
-    project_path = zkratka + '/' + year + '/' + monthalone + '/'
-    os.makedirs('.cache/'+project_path, exist_ok=True)
+    project_path = 'odmeny/tymy/'+ zkratka + '/' + year + '/' + monthalone + '/'
+    os.makedirs(project_path, exist_ok=True)
 
     # one person can have only one role in a given project
-    print('\n\n' + colored('printing project ' + project, 'blue'))
+    print('\n' + colored('processing project ' + project, 'blue'))
     project_users = payroll[payroll['Tým'] == project].copy()
     user_ids = project_users['Id'].astype(str).tolist()
 
@@ -657,29 +709,24 @@ def generate_project_files(project):
 
     # we shall create report for one user from now on
 
-    #project_summary = pd.DataFrame(
-    #    columns=['Jméno a příjmení', 'Identifikátor', 'Refundace', 'Max za úkoly', 'Odměna clk.'])
+    project_summary = pd.DataFrame()
 
     links = '\n\n'
 
     for user_id in user_ids:
         # print('printing for user '+user_id)
-        user_name, trans_user, refund_total_money, max_task_money, party_money = create_work_report(project, user_id)
-        project_summary = project_summary.append({'Jméno a příjmení': user_name, 'Identifikátor': trans_user,
-                                                  'Refundace': refund_total_money, 'Max za úkoly': max_task_money,
-                                                  'Odměna clk.': party_money}, ignore_index=True)
+        placeholder = create_work_report(project, user_id,project_path)
+        project_summary = pd.concat([project_summary,placeholder], ignore_index=True)
+        # user_name, trans_user, refund_total_money, max_task_money, party_money
         # break
     project_summary = project_summary.round(0)
 
-    # 1. print to console
-    print(project_summary[['Jméno a příjmení', 'Refundace', 'Odměna clk.']])
 
 
     # 3. create a project report
 
-    project_summary['Link'] = '[' + project_summary['Jméno a příjmení'] + '](' + project_summary['Identifikátor'] + '/)'
-    project_summary = project_summary[['Link', 'Odměna clk.']]
-    team_table = tabulate(project_summary.as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'],
+    project_summary['Link'] = '[' + project_summary['TMPNAME'] + '](' + project_summary['TMPTRANSLIT'] + '/)'
+    team_table = tabulate(project_summary[['Link', 'TMP_SKUTECNA_ODMENA_CELKEM']].as_matrix(), headers=['Jméno a příjmení', 'Odměna od strany (Kč)'],
                           tablefmt="pipe", floatfmt=".2f")
 
     placeholder = {}
@@ -696,6 +743,10 @@ def generate_project_files(project):
     f = open(target_file, 'w+')
     f.write(template)
     f.close()
+
+    # project_summary[['TMPTEAM', 'TMPNAME', 'TMPFUNCTION', 'TMP_SKUTECNY_PAUSAL', 'TMP_SKUTECNA_HODINOVKA_POD','TMP_SKUTECNA_HODINOVKA_NAD',
+    #                 'TMP_SKUTECNA_UKOLOVKA', 'TMP_SKUTECNA_MIMORADNA_ODMENA', 'TMP_SKUTECNY_ODPOCET', 'TMP_SKUTECNA_REFUNDACE', 'TMP_SKUTECNA_ODMENA_CELKEM']]
+    return project_summary
 
 #########################################################################
 
@@ -735,6 +786,7 @@ actual_business_days = business_days(startDate,endDate)
 
 os.makedirs('.cache', exist_ok=True)
 
+download_sheet()
 projects_register = build_projects_register()
 print(projects_register)
 year, monthalone = month.split('-')
@@ -769,9 +821,59 @@ bonuses = load_bonuses(month)
 
 # print(bonuses)
 
+project_summary = pd.DataFrame()
+
 for project in used_projects:
-    generate_project_files(project)
-    pass
+    placeholder=generate_project_files(project)
+    project_summary = pd.concat([project_summary, placeholder], ignore_index=True)
+
+
+project_summary['Link'] = '[' + project_summary['TMPNAME'] + '](../../tymy/'+ project_summary['TMPZKRATKA']+\
+                          '/'+year+'/'+monthalone +'/'+ project_summary['TMPTRANSLIT'] + '/)'
+summary = project_summary[['TMPZKRATKA','TMPTEAM', 'TMPNAME', 'TMP_SKUTECNE_PROCENTO','TMP_TYP', 'TMP_SKUTECNA_ODMENA_CELKEM', 'Link', 'TMP_ZATRIDENI']].copy()
+summary['name']=summary['TMPTEAM']
+summary = pd.merge(summary, projects_register, how='left', on=['name'])
+
+org_table = tabulate(summary[['TMPZKRATKA','Link', 'TMP_SKUTECNE_PROCENTO', 'TMP_SKUTECNA_ODMENA_CELKEM']].as_matrix(),
+                      headers=['Tým','Jméno a příjmení', 'Nasazení (%)', 'Odměna od strany (Kč)'],
+                      tablefmt="pipe", floatfmt=".2f")
+
+mydir = 'odmeny' + '/'+year+'/'+monthalone
+os.makedirs(mydir, exist_ok=True)
+
+myheader=['Tým', 'Jméno a příjmení', 'Typ', 'Odměna']
+summary.loc[ summary['TMP_TYP'] != 'IČO' ,['TMPZKRATKA','TMPNAME', 'TMP_TYP', 'TMP_SKUTECNA_ODMENA_CELKEM']].to_csv(mydir + '/zamestnanci.tsv', header=myheader, sep="\t",index=False)
+summary.loc[ summary['TMP_TYP'] == 'IČO' ,['TMPZKRATKA','TMPNAME', 'TMP_TYP','TMP_SKUTECNA_ODMENA_CELKEM']].to_csv(mydir + '/dodavatele.tsv', header=myheader, sep="\t", index=False)
+
+# project_summary[['TMPTEAM', 'TMPNAME', 'TMPFUNCTION', 'TMP_SKUTECNY_PAUSAL', 'TMP_SKUTECNA_HODINOVKA_POD','TMP_SKUTECNA_HODINOVKA_NAD',
+#                 'TMP_SKUTECNA_UKOLOVKA', 'TMP_SKUTECNA_MIMORADNA_ODMENA', 'TMP_SKUTECNY_ODPOCET', 'TMP_SKUTECNA_REFUNDACE', 'TMP_SKUTECNA_ODMENA_CELKEM']]
+
+placeholder = {}
+placeholder['TMPTIMERANGE'] = month
+placeholder['TMPORGTABLE'] = org_table
+
+
+target_file = mydir + '/README.md'
+
+teams_summary = summary.groupby(['Rozpočtová jednotka','TMP_ZATRIDENI'])['TMP_SKUTECNA_ODMENA_CELKEM'].sum().reset_index()
+
+myheader=['Rozpočet','Položka', 'Náklady']
+teams_summary_pretty = tabulate(teams_summary[['Rozpočtová jednotka','TMP_ZATRIDENI', 'TMP_SKUTECNA_ODMENA_CELKEM']].as_matrix(),
+                      headers=myheader,
+                      tablefmt="pipe", floatfmt=".2f")
+
+teams_summary[['Rozpočtová jednotka','TMP_ZATRIDENI', 'TMP_SKUTECNA_ODMENA_CELKEM']].to_csv(mydir + '/cerpani_rozpoctu.tsv', header=myheader, sep="\t", index=False)
+
+placeholder['TMPAGREGATEDTABLE'] = teams_summary_pretty
+
+fp = open('templates/organization_template.md')
+template = fp.read()
+template = template.format(**placeholder)
+
+f = open(target_file, 'w+')
+f.write(template)
+f.close()
+
 
 '''
 print(user_projects)
