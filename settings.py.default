@@ -1,3 +1,4 @@
+REDMINE_URL = 'https://redmine.pirati.cz'
 PAYROLL_SHEET = 'https://docs.google.com/spreadsheets/d/1v6PH1cYvLkU-JvAAUVV6G0caNCcQa1SkqoBsAWLuPpI/edit?ts=589ba342#gid=1547903023'
 
 GITHUB_OTHERINCOMES='other_incomes.csv'

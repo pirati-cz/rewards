@@ -777,7 +777,7 @@ except AttributeError:
     lastMonth = first - timedelta(days=1)
     month = str(lastMonth.strftime("%Y-%m"))
 
-month='2017-01'
+#month='2017-01'
 
 startDate=datetime.strptime(month+'-01', '%Y-%m-%d').date()
 endDate=last_day(month)
