@@ -95,7 +95,7 @@ Rules
   - [ ] The Prague Chamber (Ondra)
   - [ ] The department for medias (Mikuláš)
   - [ ] The presidium (Jakub/Vojta)
-  - [ ] The personal department (Kuba Nepejchal)
+  - [ ] The personal department (Jan Novák)
   - [ ] The newly elected regional assemblies (Jakub)
 
 https://redmine.pirati.cz/projects/kspraha/wiki/Odm%C4%9B%C5%88ov%C3%A1n%C3%AD
