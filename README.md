@@ -35,10 +35,16 @@ Ubuntu:
 
 
 ```
-sudo -H pip3 install pandas czech_holidays tabulate termcolor trans
+sudo apt-get install python3-pip
+sudo -H pip3 install pandas czech_holidays tabulate termcolor trans wget gsheets pygithub
 ```
 
 Postupuji dle http://gsheets.readthedocs.io/en/latest/
+
+Udělat nový OAuth 2.0 certifikát, uložit ho jako client_id.json do adresáře
+https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=pirati-161013&duration=PT1H
+Aktivovat Google Sheets API v developers konzoli
+
 
 Scheme
 ------

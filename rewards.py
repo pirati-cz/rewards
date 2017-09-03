@@ -37,17 +37,17 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-v', '--verbose', action="store_true")
 
-subparsers = parser.add_subparsers(help='sub-command help')
+# subparsers = parser.add_subparsers(help='sub-command help')
+# parser_report = subparsers.add_parser('teams', help='create or update report of work', aliases=['team'])
 
-parser_report = subparsers.add_parser('teams', help='create or update report of work', aliases=['team'])
-parser_report.add_argument('-t', '--teams', nargs='*', help="project short name from redmine, such as 'praha'")
-parser_report.add_argument('-m', '--month', help='month such as 2016-02')
-parser_report.add_argument('-c', '--cache', action="store_true", help='use cache (do not download)')
+#parser.add_argument('-t', '--teams', nargs='*', help="project short name from redmine, such as 'praha'")
+parser.add_argument('-m', '--month', help='month such as 2016-02')
+parser.add_argument('-c', '--cache', action="store_true", help='use cache (do not download)')
 
-parser_remind = subparsers.add_parser('remind', help='remind the team members to fill in the rewards', aliases=['mail'])
-parser_remind.add_argument('-t', '--teams', nargs='*', help="project short name from redmine, such as 'praha'")
-parser_remind.add_argument('-m', '--month', help='month such as 2016-02')
-parser_remind.add_argument('number', help='the number for first and second reminder')
+#parser_remind = subparsers.add_parser('remind', help='remind the team members to fill in the rewards', aliases=['mail'])
+#parser_remind.add_argument('-t', '--teams', nargs='*', help="project short name from redmine, such as 'praha'")
+#parser_remind.add_argument('-m', '--month', help='month such as 2016-02')
+#parser_remind.add_argument('number', help='the number for first and second reminder')
 
 args = parser.parse_args()
 
@@ -78,26 +78,29 @@ def read_payroll():
 
     #print(tymy_df)
 
-    lide_df = pd.read_csv('.cache/Lidé.csv', header=0)
+    lide_df = pd.read_csv('.cache/Lidé.csv', header=0, dtype={'Id': np.int32} )
 
     #print(lide_df)
 
     target_file = '.cache/Smlouvy.csv'
     df = pd.read_csv(target_file, header=1, dtype={'Id': np.int32, 'týdně': np.float32, 'Paušál': np.float32,
                                                    'Kč/hod': np.float32, 'Úkolovka': np.float32, 'Odpočet': np.float32,
-                                                   'Úkol': str, 'Začátek': str, 'Konec': str, 'Zatřídění':str})
+                                                   'Úkol': str, 'Platí od': np.float32, 'Platí do': np.float32,
+                                                   'Začátek': str, 'Konec': str, 'Zatřídění':str})
     # payroll has not index, since the only unique field should be the contract url fragment
 
     #print(df)
 
+    # referential date since the dates are returned starting 1899-12-30
+    df['Začátek'] = df['Platí od'].apply(num2datestr)
+    df['Konec'] = df['Platí do'].apply(num2datestr)
+
+    #print (df)
     # now join the other tables
     df = pd.merge(df, lide_df, how='inner' )
     df = pd.merge(df, tymy_df, how='inner' ).sort_values('Příjmení')
     df['Jméno a příjmení'] = df['Jméno'] + ' ' + df['Příjmení']
 
-    # referential date since the dates are returned starting 1899-12-30
-    df['Začátek'] = df['Platí od'].apply(num2datestr)
-    df['Konec'] = df['Platí do'].apply(num2datestr)
 
     df.update(df[['týdně', 'Paušál', 'Kč/hod', 'Úkolovka', 'Odpočet']].fillna(0.0))
     df.update(df[[ 'Začátek', 'Konec', 'Úkol']].fillna(""))
@@ -192,9 +195,10 @@ def safe_download(link, target_file):
         os.remove(filename)
 
 def get_data_chunk(startDate,endDate,user_ids):
-
     link=create_link(startDate,endDate,user_ids)
+    #print(user_ids)
     target_file='.cache/data.csv'
+    #print(link)
     safe_download(link, target_file)
 
     df = pd.read_csv(target_file, header=0, encoding='utf-8', engine='c')
@@ -788,10 +792,11 @@ os.makedirs('.cache', exist_ok=True)
 
 download_sheet()
 projects_register = build_projects_register()
-print(projects_register)
+#print(projects_register)
 year, monthalone = month.split('-')
 payroll = read_payroll()
 
+#print(payroll)
 #print(payroll)
 
 payroll = validate_contracts(payroll) # filter only contracts, that are valid in some of the range given
@@ -811,6 +816,8 @@ used_projects = payroll['Tým'].unique()
 teams = used_projects
 
 # print(teams)
+
+#print(payroll)
 
 user_ids = payroll['Id'].copy().astype(str).tolist()
 data_chunk = get_data_chunk(startDate,endDate,user_ids)
@@ -832,11 +839,17 @@ project_summary['Link'] = '[' + project_summary['TMPNAME'] + '](../../tymy/'+ pr
                           '/'+year+'/'+monthalone +'/'+ project_summary['TMPTRANSLIT'] + '/)'
 summary = project_summary[['TMPZKRATKA','TMPTEAM', 'TMPNAME', 'TMP_SKUTECNE_PROCENTO','TMP_TYP', 'TMP_SKUTECNA_ODMENA_CELKEM', 'Link', 'TMP_ZATRIDENI']].copy()
 summary['name']=summary['TMPTEAM']
+
 summary = pd.merge(summary, projects_register, how='left', on=['name'])
+#print(projects_register)
 
 org_table = tabulate(summary[['TMPZKRATKA','Link', 'TMP_SKUTECNE_PROCENTO', 'TMP_SKUTECNA_ODMENA_CELKEM']].as_matrix(),
                       headers=['Tým','Jméno a příjmení', 'Nasazení (%)', 'Odměna od strany (Kč)'],
                       tablefmt="pipe", floatfmt=".2f")
+
+org_table_display = tabulate(summary[['TMPZKRATKA','TMPNAME', 'TMP_SKUTECNE_PROCENTO', 'TMP_SKUTECNA_ODMENA_CELKEM']].as_matrix(),
+                      headers=['Tým','Jméno a příjmení', 'Nasazení (%)', 'Odměna od strany (Kč)'],
+                      tablefmt="plain", floatfmt=".0f")
 
 mydir = 'odmeny' + '/'+year+'/'+monthalone
 os.makedirs(mydir, exist_ok=True)
@@ -851,7 +864,7 @@ summary.loc[ summary['TMP_TYP'] == 'IČO' ,['TMPZKRATKA','TMPNAME', 'TMP_TYP','T
 placeholder = {}
 placeholder['TMPTIMERANGE'] = month
 placeholder['TMPORGTABLE'] = org_table
-
+print(org_table_display)
 
 target_file = mydir + '/README.md'
 
