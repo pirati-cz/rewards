@@ -201,7 +201,7 @@ def get_data_chunk(startDate,endDate,user_ids):
     #print(link)
     safe_download(link, target_file)
 
-    df = pd.read_csv(target_file, header=0, encoding='utf-8', engine='c')
+    df = pd.read_csv(target_file, header=0, encoding='utf-8', engine='c', dtype={'Refundace': np.object_ } )
     df = df[ df['Refundace'] != 'neproplácet' ]
     return df
 
@@ -236,17 +236,29 @@ def build_projects_register():
         safe_download(link, target_file)
 
         easylist = json.loads(open(target_file).read())
-        if easylist['total_count']>100:
-            raise NotImplementedError('To many project in the database. Needs more coding.')
-            # This is not yet finished...
+
+        total_count = easylist['total_count']
+
         projects = easylist['projects']
 
         easylist = { project['id'] : { 'name': project['name'],
                                        'identifier': project['identifier'] }
                      for project in projects }
+
+        if total_count > 100:
+            for offset in range(100,total_count,100):
+                safe_download(link+'&offset='+str(offset), target_file)
+                easylist2 = json.loads(open(target_file).read())
+                projects = easylist2['projects']
+                easylist2 = {project['id']: {'name': project['name'],
+                                            'identifier': project['identifier']}
+                            for project in projects}
+                easylist = {**easylist, **easylist2}
+
         with open('.cache/filtered_projects.json', 'w+') as f:
             json.dump(easylist, f)
         os.remove(target_file)
+
     easylist = json.loads(open('.cache/filtered_projects.json').read())
     df = pd.DataFrame
     df = df.from_dict(easylist, orient='index')
@@ -792,7 +804,7 @@ os.makedirs('.cache', exist_ok=True)
 
 download_sheet()
 projects_register = build_projects_register()
-#print(projects_register)
+print(projects_register)
 year, monthalone = month.split('-')
 payroll = read_payroll()
 
@@ -822,7 +834,7 @@ teams = used_projects
 user_ids = payroll['Id'].copy().astype(str).tolist()
 data_chunk = get_data_chunk(startDate,endDate,user_ids)
 
-# create_monthly_bonus_table(payroll) # should be linked to command line parameters
+create_monthly_bonus_table(payroll) # should be linked to command line parameters
 
 bonuses = load_bonuses(month)
 
@@ -841,7 +853,7 @@ summary = project_summary[['TMPZKRATKA','TMPTEAM', 'TMPNAME', 'TMP_SKUTECNE_PROC
 summary['name']=summary['TMPTEAM']
 
 summary = pd.merge(summary, projects_register, how='left', on=['name'])
-#print(projects_register)
+
 
 org_table = tabulate(summary[['TMPZKRATKA','Link', 'TMP_SKUTECNE_PROCENTO', 'TMP_SKUTECNA_ODMENA_CELKEM']].as_matrix(),
                       headers=['Tým','Jméno a příjmení', 'Nasazení (%)', 'Odměna od strany (Kč)'],
